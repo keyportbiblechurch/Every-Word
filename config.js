@@ -26,7 +26,7 @@ export const CONFIG = {
 
   // Optional: your Cloudflare Worker URL for translation (SETUP.md, Part 3).
   // Leave as "" for English-only captions.
-  translateUrl: "",
+  translateUrl: "https://every-word-translate.kbcapps.workers.dev/",
 
   // Languages the booth turns on by default (DeepL codes, see common.js).
   defaultLanguages: ["ES"]
