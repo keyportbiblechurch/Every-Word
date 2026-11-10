@@ -169,6 +169,18 @@ function renderPreview() {
 // ---------- speech recognition ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, wakeLock = null;
+function browserName() {
+  const ua = navigator.userAgent;
+  if (navigator.brave) return "Brave";
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands || []).map(b => b.brand).filter(b => !/Not.?A.?Brand|Chromium/i.test(b));
+  if (/Electron/i.test(ua)) return "an app’s built-in browser";
+  if (/OPR\//.test(ua)) return "Opera";
+  if (/Firefox\//.test(ua)) return "Firefox";
+  if (/DuckDuckGo/i.test(ua)) return "DuckDuckGo";
+  if (brands.length) return brands.join(", ");
+  if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return "Safari";
+  return "unknown browser";
+}
 function micNotice(msg) { const n = $("micNotice"); n.textContent = msg || ""; n.classList.toggle("hidden", !msg); }
 function setMicUI() {
   $("micBtn").textContent = wantListening ? "Stop captions" : "Start captions";
@@ -177,7 +189,7 @@ function setMicUI() {
   $("micState").textContent = wantListening ? "Listening" : "Mic off";
 }
 function startMic() {
-  if (!SR) { micNotice("Live captions need Google Chrome or Microsoft Edge on the booth computer. You can still type lines below."); return; }
+  if (!SR) { micNotice("This browser (" + browserName() + ") doesn’t offer speech recognition. Open this page in Google Chrome or Microsoft Edge, typed straight into the address bar rather than opened from inside another app. Brave, Opera, Firefox and DuckDuckGo don’t support it. You can still type lines below."); return; }
   rec = new SR();
   rec.lang = CONFIG.speechLang || "en-US";
   rec.continuous = true;
