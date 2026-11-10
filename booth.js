@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned } from "./common.js";
+import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -36,7 +36,7 @@ $("signOut").onclick = () => { stopMic(); signOut(auth); };
 
 // ---------- state ----------
 let started = false, lines = [], partial = "", wantListening = false, session = store.get("session", Date.now().toString(36));
-let selLangs = store.get("langs", CONFIG.defaultLanguages || []);
+let selLangs = store.get("langs", CONFIG.defaultLanguages || []).filter(c => LANGS[c]);
 let trBackoff = 0, trBusy = false;
 const canTranslate = !!CONFIG.translateUrl;
 setBibleRelay(CONFIG.translateUrl);
@@ -59,8 +59,9 @@ function startConsole() {
     `<label><input type="checkbox" value="${c}" ${selLangs.includes(c) ? "checked" : ""} ${canTranslate ? "" : "disabled"}> ${esc(n)}</label>`).join("");
   $("langBox").onchange = () => {
     selLangs = [...$("langBox").querySelectorAll("input:checked")].map(i => i.value);
-    store.set("langs", selLangs); pushState(true);
+    store.set("langs", selLangs); pushState(true); renderBibles();
   };
+  loadBibles();
   if (!canTranslate) showTr("Translation is off. Add your Cloudflare Worker URL to config.js to turn it on (SETUP.md, Part 3).");
 
   $("sermonRefs").value = store.get("sermonRefs", $("sermonRefs").value);
@@ -132,10 +133,10 @@ async function attachVerses(l, force) {
   for (const r of refs.slice(0, 3)) {
     for (const cand of [r, ...(r.alts || [])]) {          // e.g. "Psalm 231" tries 23:1, then 2:31
       try {
-        const v = await fetchVerses(cand);
-        if (!v) continue;
+        const card = await buildCard(cand);
+        if (!card) continue;
         recentRefs.push(cand.label);
-        cards.push(v.more ? { label: v.label, text: v.text, note: "Showing verses " + v.more } : { label: v.label, text: v.text });
+        cards.push(card);
         $("verseNotice").classList.add("hidden");
         break;
       } catch (err) {
@@ -205,6 +206,57 @@ async function pumpTranslate() {
 }
 function showTr(msg) { $("trNotice").textContent = msg; $("trNotice").classList.remove("hidden"); }
 
+// ---------- Bible versions for each language ----------
+let catalogList = null, catalogErr = false;
+let bibles = store.get("bibles", {});          // { ES: "spa_r09", PL: "" (= none) }
+function loadBibles() {
+  renderBibles();
+  fetchCatalog().then(list => { catalogList = list; catalogErr = false; renderBibles(); })
+    .catch(() => { catalogErr = true; renderBibles(); });
+}
+function bibleFor(lang) {
+  if (bibles[lang] !== undefined) return bibles[lang] || null;
+  if (!catalogList) return null;
+  const first = biblesFor(lang, catalogList)[0];
+  return first ? first.id : null;
+}
+function renderBibles() {
+  const box = $("bibleBox");
+  if (!selLangs.length) { box.innerHTML = '<span class="hint">Tick a language above to choose its Bible.</span>'; return; }
+  if (catalogErr) { box.innerHTML = '<span class="notice">Couldn’t load the list of Bibles. Verse cards will show in English (BSB) only. If this network blocks the Bible service, deploy the latest worker.js.</span>'; return; }
+  if (!catalogList) { box.innerHTML = '<span class="hint">Loading Bibles…</span>'; return; }
+  box.innerHTML = selLangs.map(c => {
+    const opts = biblesFor(c, catalogList), cur = bibleFor(c) || "";
+    const name = t => esc((t.name && t.englishName && t.name !== t.englishName ? t.name + " · " + t.englishName : t.englishName || t.name || t.id) + (t.shortName ? " (" + t.shortName + ")" : ""));
+    return `<label class="field" for="bible-${c}">${esc(LANGS[c] || c)}
+      <select id="bible-${c}" data-lang="${c}">
+        ${opts.map(t => `<option value="${esc(t.id)}" ${t.id === cur ? "selected" : ""}>${name(t)}</option>`).join("")}
+        <option value="" ${cur ? "" : "selected"}>${opts.length ? "None: show English (BSB)" : "No full Bible available: show English (BSB)"}</option>
+      </select></label>`;
+  }).join("");
+}
+$("bibleBox").addEventListener("change", e => {
+  const s = e.target.closest("select[data-lang]"); if (!s) return;
+  bibles[s.dataset.lang] = s.value; store.set("bibles", bibles);
+});
+
+// Builds a verse card: BSB text plus the same passage from each selected language's Bible
+async function buildCard(r) {
+  const v = await fetchVerses(r);
+  if (!v) return null;
+  const card = toCard(v);
+  const tr = {};
+  await Promise.all(selLangs.map(async c => {
+    const id = bibleFor(c); if (!id) return;
+    try {
+      const t = await fetchVerses(r, id);
+      if (t) tr[c] = { label: t.label, text: t.text, version: t.version };
+    } catch (err) { console.warn("Bible", id, "failed for", r.label, err); }
+  }));
+  if (Object.keys(tr).length) card.tr = tr;
+  return card;
+}
+
 // ---------- today's Scripture (preloaded) ----------
 let planned = [];
 const toCard = v => v.more ? { label: v.label, text: v.text, note: "Showing verses " + v.more } : { label: v.label, text: v.text };
@@ -225,13 +277,12 @@ $("refList").addEventListener("click", async e => {
   const r = planned[+b.dataset.show]; if (!r) return;
   b.disabled = true;
   try {
-    const v = await fetchVerses(r);
-    if (!v) throw new Error("not found");
-    const card = toCard(v);
+    const card = await buildCard(r);
+    if (!card) throw new Error("not found");
     const nr = push(ref(db, base + "/lines"));
-    const l = { key: nr.key, src: v.label, t: Date.now(), tr: {}, scripture: [card] };
-    lines.push(l); recentRefs.push(v.label);
-    set(nr, { src: v.label, t: serverTimestamp(), scripture: [card] }).catch(writeErr);
+    const l = { key: nr.key, src: card.label, t: Date.now(), tr: {}, scripture: [card] };
+    lines.push(l); recentRefs.push(card.label);
+    set(nr, { src: card.label, t: serverTimestamp(), scripture: [card] }).catch(writeErr);
     renderPreview();
     b.textContent = "Sent ✓"; setTimeout(() => { b.textContent = "Show"; b.disabled = false; }, 2500);
   } catch { b.textContent = "Couldn’t load"; setTimeout(() => { b.textContent = "Show"; b.disabled = false; }, 2500); }
@@ -280,7 +331,8 @@ function renderPreview() {
   p.innerHTML = lines.slice(-80).map(l => {
     const tr = Object.entries(l.tr || {}).map(([c, t]) => `<span class="tr">${c}: ${esc(t)}</span>`).join("");
     const st = l.pending ? '<span class="tr state">Translating…</span>' : l.failed ? '<span class="tr state">English only</span>' : "";
-    const sc = (l.scripture || []).map(s => `<span class="tr verse-mini"><b>${esc(s.label)}</b> ${esc(s.text)}</span>`).join("");
+    const sc = (l.scripture || []).map(s => `<span class="tr verse-mini"><b>${esc(s.label)}</b> ${esc(s.text)}${
+      s.tr ? Object.entries(s.tr).map(([c, t]) => `<br><b>${c}:</b> ${esc(t.label)} <i>(${esc(t.version)})</i>`).join("") : ""}</span>`).join("");
     return `<div class="pline${editing === l ? " editing" : ""}" data-key="${esc(l.key)}" title="Click to fix this line"><time>${hhmm(l.t)}</time><span>${markRefs(esc(l.src))}</span>${sc}${tr}${st}</div>`;
   }).join("") + (partial ? `<div class="pline"><time>now</time><span class="hint"><i>${esc(partial)}…</i></span></div>` : "");
   if (stick) p.scrollTop = p.scrollHeight;

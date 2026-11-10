@@ -47,7 +47,14 @@ function render() {
     const t = lang !== "EN" && l.tr && l.tr[lang];
     const main = t || en, orig = t && showOrig ? en : "";
     const dir = t && RTL.has(lang) ? ' dir="rtl"' : "";
-    const cards = (l.scripture || []).map(s => s && s.text ? `<blockquote class="verse-card" dir="ltr"><cite>${esc(s.label)} <span>BSB</span></cite>${esc(s.text)}${s.note ? `<small>${esc(s.note)}</small>` : ""}</blockquote>` : "").join("");
+    const cards = (l.scripture || []).map(s => {
+      if (!s || !s.text) return "";
+      const t = lang !== "EN" && s.tr && s.tr[lang] && s.tr[lang].text ? s.tr[lang] : null;
+      if (!t) return `<blockquote class="verse-card" dir="ltr"><cite>${esc(s.label)} <span>BSB</span></cite>${esc(s.text)}${s.note ? `<small>${esc(s.note)}</small>` : ""}</blockquote>`;
+      const vdir = RTL.has(lang) ? "rtl" : "ltr";
+      return `<blockquote class="verse-card" dir="${vdir}"><cite>${esc(t.label)} <span>${esc(t.version || "")}</span></cite>${esc(t.text)}${
+        showOrig ? `<span class="orig-verse" dir="ltr"><b>${esc(s.label)} (BSB)</b> ${esc(s.text)}</span>` : ""}${s.note ? `<small dir="ltr">${esc(s.note)}</small>` : ""}</blockquote>`;
+    }).join("");
     return `<p class="cap${i < n - 6 ? " old" : ""}"${dir}>${markRefs(esc(main))}${orig ? `<span class="orig" dir="ltr">${markRefs(esc(orig))}</span>` : ""}</p>${cards}`;
   }).join("");
   if (paused) html += `<p class="paused-banner">Captions are paused during prayer. They’ll pick up again shortly.</p>`;

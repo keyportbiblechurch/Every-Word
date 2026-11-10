@@ -77,6 +77,9 @@ button { cursor: pointer; }
 .pline[data-key]:hover { background: var(--ref-bg); }
 .pline.editing { outline: 2px solid var(--accent); }
 .edit-bar { display: flex; flex-direction: column; gap: 8px; border: 2px solid var(--accent); border-radius: 12px; padding: 12px; }
+.bible-box { display: flex; flex-direction: column; gap: 8px; }
+.bible-box select { min-height: 40px; border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 8px; background: var(--bg); font-weight: 400; max-width: 100%; }
+.verse-card .orig-verse { display: block; font-size: 0.8em; color: var(--muted); margin-top: 0.35em; }
 .ref-list { display: flex; flex-direction: column; gap: 6px; }
 .ref-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ref-item .hint { margin-right: auto; }

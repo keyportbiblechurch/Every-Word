@@ -12,10 +12,25 @@ export const LANGS = {
   FR: "Français (French)",
   DE: "Deutsch (German)",
   PL: "Polski (Polish)",
-  TH: "ไทย (Thai)",
   AR: "العربية (Arabic)"
 };
 export const RTL = new Set(["AR"]);
+
+// Bible catalog language codes (ISO 639-3) for each caption language, and the version
+// preferred by default when the catalog has it (matched against id, name and English name).
+export const BIBLE_LANGS = {
+  ES: { codes: ["spa"], prefer: [/^spa_r09$/i, /Reina.?Valera/i] },
+  RU: { codes: ["rus"], prefer: [/Synod|Синодальн/i] },
+  UK: { codes: ["ukr"], prefer: [/Ogi[eiy]nko|Огієнк/i, /Kulish|Куліш/i] },
+  KO: { codes: ["kor"], prefer: [/개역|Revised/i] },
+  ZH: { codes: ["cmn", "zho", "chi"], prefer: [/和合|Union/i] },
+  JA: { codes: ["jpn"], prefer: [/口語|Kougo|Colloquial/i] },
+  "PT-BR": { codes: ["por"], prefer: [/Almeida/i] },
+  FR: { codes: ["fra", "fre"], prefer: [/Segond/i] },
+  DE: { codes: ["deu", "ger"], prefer: [/Luther/i, /Elberfeld/i, /Schlachter/i] },
+  PL: { codes: ["pol"], prefer: [/Gda[nń]sk/i, /Warsz/i] },
+  AR: { codes: ["arb", "ara"], prefer: [/^arb_vdv$/i, /Van Dyck|فان دايك/i] }
+};
 
 export const FIREBASE_VERSION = "10.12.2";
 
@@ -96,30 +111,65 @@ let relayBase = "", useRelay = false;
 // Optional relay through your Cloudflare Worker, for networks that block bible.helloao.org
 export const setBibleRelay = url => { relayBase = url ? url.replace(/\/+$/, "") : ""; };
 const getJSON = url => fetch(url).then(r => { if (!r.ok) throw new Error("bible " + r.status); return r.json(); });
-async function loadChapter(key) {
+const safeId = t => /^[A-Za-z0-9_-]{2,40}$/.test(t) ? t : "BSB";
+async function loadChapter(translation, key) {
   if (!useRelay) {
-    try { return await getJSON("https://bible.helloao.org/api/BSB/" + key + ".json"); }
+    try { return await getJSON("https://bible.helloao.org/api/" + translation + "/" + key + ".json"); }
     catch (err) { if (!relayBase) throw err; useRelay = true; }
   }
-  return getJSON(relayBase + "/bible/" + key);
+  // BSB keeps the original short relay path so an older Worker still works for English
+  return getJSON(relayBase + "/bible/" + (translation === "BSB" ? "" : translation + "/") + key);
 }
-// Returns { label, text, more } or null. "more" is true when the range was cut to MAX_VERSES.
-export async function fetchVerses(ref) {
-  const key = ref.id + "/" + ref.ch;
-  if (!chapterCache.has(key)) {
-    chapterCache.set(key, loadChapter(key).catch(err => { chapterCache.delete(key); throw err; }));
+// The Bible service's catalog of translations (loaded once)
+let catalog = null;
+export function fetchCatalog() {
+  if (!catalog) {
+    catalog = (async () => {
+      if (!useRelay) {
+        try { return await getJSON("https://bible.helloao.org/api/available_translations.json"); }
+        catch (err) { if (!relayBase) throw err; useRelay = true; }
+      }
+      return getJSON(relayBase + "/bible-translations");
+    })().then(d => (d && d.translations) || []).catch(err => { catalog = null; throw err; });
   }
-  const data = await chapterCache.get(key);
+  return catalog;
+}
+// Full Bibles available for one caption language, preferred versions first
+export function biblesFor(lang, translations) {
+  const spec = BIBLE_LANGS[lang];
+  if (!spec) return [];
+  const full = translations.filter(t => t && spec.codes.includes(String(t.language || "").toLowerCase()) && (t.numberOfBooks || 0) >= 66);
+  const rank = t => { const s = [t.id, t.name, t.englishName, t.shortName].join(" "); const i = spec.prefer.findIndex(re => re.test(s)); return i < 0 ? 99 : i; };
+  return full.sort((a, b) => rank(a) - rank(b) || String(a.englishName || a.name).localeCompare(String(b.englishName || b.name)));
+}
+// Returns { label, text, more, version } or null. "more" is set when the range was cut to MAX_VERSES.
+// translation defaults to the Berean Standard Bible.
+export async function fetchVerses(ref, translation = "BSB") {
+  translation = safeId(translation);
+  const key = ref.id + "/" + ref.ch;
+  const cacheKey = translation + "/" + key;
+  if (!chapterCache.has(cacheKey)) {
+    chapterCache.set(cacheKey, loadChapter(translation, key).catch(err => { chapterCache.delete(cacheKey); throw err; }));
+  }
+  const data = await chapterCache.get(cacheKey);
   const content = (data && data.chapter && data.chapter.content) || [];
   const last = Math.min(ref.v2, ref.v1 + MAX_VERSES - 1);
   const parts = [];
   for (const item of content) {
     if (!item || item.type !== "verse" || item.number < ref.v1 || item.number > last) continue;
     const words = (item.content || []).map(c => typeof c === "string" ? c : (c && typeof c.text === "string" ? c.text : "")).join(" ");
-    parts.push((ref.v2 > ref.v1 ? item.number + " " : "") + words.replace(/\s+/g, " ").replace(/\s+([,.;:!?’”)\]])/g, "$1").trim());
+    parts.push((ref.v2 > ref.v1 ? item.number + " " : "") + words.replace(/\s+/g, " ").replace(/\s+([,.;:!?’”)\]])/g, "$1")
+      .replace(/([　-鿿가-힯＀-￯])\s+(?=[　-鿿＀-￯])/g, "$1").trim());
   }
   if (!parts.length) return null;
-  return { label: ref.label, text: parts.join(" "), more: ref.v2 > last ? ref.v1 + "–" + last : "" };
+  let label = ref.label;
+  if (translation !== "BSB") {   // book name in that Bible's own language, e.g. "Romanos 8:28"
+    const b = data.book || {};
+    const name = b.commonName || b.name || b.title;
+    if (name) label = name + " " + ref.ch + ":" + ref.v1 + (ref.v2 > ref.v1 ? "–" + ref.v2 : "");
+  }
+  const t = data.translation || {};
+  return { label, text: parts.join(" "), more: ref.v2 > last ? ref.v1 + "–" + last : "", version: t.shortName || t.id || translation };
 }
 
 // Turn spoken references into written ones: "Romans chapter 8 verse 28" -> "Romans 8:28"
