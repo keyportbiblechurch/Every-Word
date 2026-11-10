@@ -17,11 +17,11 @@ export const CONFIG = {
 
   // Paste your Firebase web app config here (SETUP.md, Part 2, step 9).
   firebase: {
-    apiKey: "PASTE-HERE",
-    authDomain: "PASTE-HERE.firebaseapp.com",
-    databaseURL: "https://PASTE-HERE-default-rtdb.firebaseio.com",
-    projectId: "PASTE-HERE",
-    appId: "PASTE-HERE"
+    apiKey: "AIzaSyBHzTClElCuF5KYwlgEuIW88PbHUpGlm1I",
+    authDomain: "every-word-1a4d2.firebaseapp.com",
+    databaseURL: "https://every-word-1a4d2-default-rtdb.firebaseio.com",
+    projectId: "every-word-1a4d2",
+    appId: "1:297248140700:web:8f1d5f23e470b2dcf06c59"
   },
 
   // Optional: your Cloudflare Worker URL for translation (SETUP.md, Part 3).
