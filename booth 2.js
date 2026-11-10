@@ -1,0 +1,255 @@
+import { CONFIG } from "./config.js";
+import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured } from "./common.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const $ = id => document.getElementById(id);
+const room = roomName(CONFIG.room);
+const base = `rooms/${room}`;
+const readerUrl = new URL("index.html" + (room !== (CONFIG.room || "main") ? "?room=" + room : ""), location.href).href;
+
+if (!isConfigured(CONFIG)) {
+  $("setupNeeded").classList.remove("hidden");
+  throw new Error("Every Word: config.js is not filled in yet.");
+}
+
+const app = initializeApp(CONFIG.firebase);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+// ---------- sign in ----------
+onAuthStateChanged(auth, user => {
+  $("login").classList.toggle("hidden", !!user);
+  $("booth").classList.toggle("hidden", !user);
+  if (user) startConsole();
+});
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  try { await signInWithEmailAndPassword(auth, $("email").value.trim(), $("password").value); }
+  catch (err) {
+    $("loginMsg").textContent = "Sign-in failed. Check the email and password you created in Firebase (Authentication → Users).";
+    $("loginMsg").classList.remove("hidden");
+  }
+});
+$("signOut").onclick = () => { stopMic(); signOut(auth); };
+
+// ---------- state ----------
+let started = false, lines = [], partial = "", wantListening = false, session = store.get("session", Date.now().toString(36));
+let selLangs = store.get("langs", CONFIG.defaultLanguages || []);
+let trBackoff = 0, trBusy = false;
+const canTranslate = !!CONFIG.translateUrl;
+
+function startConsole() {
+  if (started) return; started = true;
+  $("shareUrl").textContent = readerUrl;
+  $("printUrl").textContent = readerUrl;
+  try {
+    new QRCode($("qr"), { text: readerUrl, width: 180, height: 180 });
+    new QRCode($("qrPrint"), { text: readerUrl, width: 300, height: 300 });
+  } catch { $("qr").classList.add("hidden"); }
+
+  $("svcTitle").value = store.get("title", "Sunday Worship");
+  $("vocab").value = store.get("vocab", $("vocab").value);
+  $("svcTitle").oninput = e => { store.set("title", e.target.value); pushState(); };
+  $("vocab").oninput = e => store.set("vocab", e.target.value);
+
+  $("langBox").innerHTML = Object.entries(LANGS).map(([c, n]) =>
+    `<label><input type="checkbox" value="${c}" ${selLangs.includes(c) ? "checked" : ""} ${canTranslate ? "" : "disabled"}> ${esc(n)}</label>`).join("");
+  $("langBox").onchange = () => {
+    selLangs = [...$("langBox").querySelectorAll("input:checked")].map(i => i.value);
+    store.set("langs", selLangs); pushState(true);
+  };
+  if (!canTranslate) showTr("Translation is off. Add your Cloudflare Worker URL to config.js to turn it on (SETUP.md, Part 3).");
+
+  onValue(ref(db, ".info/connected"), s => {
+    const ok = !!s.val();
+    $("conn").className = "chip" + (ok ? " live" : " warn");
+    $("conn").textContent = ok ? "Connected · room " + room : "Offline: check the internet";
+  });
+  setInterval(() => pushState(true), 20000); // heartbeat for readers
+  pushState(true);
+  renderPreview();
+}
+
+// ---------- writing to Firebase ----------
+let stT = null, stLast = 0;
+function pushState(now) {
+  const go = () => {
+    stT = null; stLast = Date.now();
+    set(ref(db, base + "/state"), {
+      title: $("svcTitle").value.slice(0, 80),
+      live: wantListening,
+      langs: canTranslate ? selLangs : [],
+      partial: partial.slice(-240),
+      session, beat: serverTimestamp()
+    }).catch(writeErr);
+  };
+  if (now || Date.now() - stLast > 400) { clearTimeout(stT); go(); }
+  else if (!stT) stT = setTimeout(go, 400);
+}
+function writeErr(err) {
+  $("conn").className = "chip warn";
+  $("conn").textContent = "Can’t write: check database rules (SETUP.md, Part 2)";
+  console.error(err);
+}
+
+const fixes = () => $("vocab").value.split("\n").map(s => s.split(/\s*(?:=>|→|=)\s*/)).filter(p => p.length === 2 && p[0] && p[1]);
+const applyFixes = t => fixes().reduce((s, [a, b]) => s.replace(new RegExp("\\b" + a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi"), b), t);
+const tidy = t => { t = tidyRefs(applyFixes(t.trim())); return t.charAt(0).toUpperCase() + t.slice(1); };
+
+function addLine(text) {
+  text = tidy(text);
+  if (!text) return;
+  const r = push(ref(db, base + "/lines"));
+  const l = { key: r.key, src: text, t: Date.now(), tr: {}, pending: canTranslate && selLangs.length > 0 };
+  lines.push(l);
+  set(r, { src: text, t: serverTimestamp() }).catch(writeErr);
+  renderPreview();
+  pumpTranslate();
+}
+
+// ---------- translation (Cloudflare Worker → DeepL) ----------
+async function pumpTranslate() {
+  if (trBusy || !canTranslate) return;
+  if (Date.now() < trBackoff) { setTimeout(pumpTranslate, trBackoff - Date.now() + 50); return; }
+  const batch = lines.filter(l => l.pending).slice(0, 8);
+  if (!batch.length || !selLangs.length) { lines.forEach(l => l.pending = false); renderPreview(); return; }
+  trBusy = true;
+  const targets = selLangs.slice();
+  const context = lines.filter(l => !l.pending).slice(-4).map(l => l.src).join(" ");
+  try {
+    const res = await fetch(CONFIG.translateUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: batch.map(l => l.src), targets, context })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(data.error || res.status), { code: data.error, status: res.status });
+    batch.forEach((l, i) => {
+      const tr = {};
+      targets.forEach(c => { const t = data.translations && data.translations[c] && data.translations[c][i]; if (typeof t === "string") tr[c] = t; });
+      l.tr = { ...l.tr, ...tr }; l.pending = false;
+      if (Object.keys(tr).length) update(ref(db, `${base}/lines/${l.key}/tr`), tr).catch(writeErr);
+      else l.failed = true;
+    });
+    $("trNotice").classList.add("hidden");
+  } catch (err) {
+    if (err.code === "quota") {
+      showTr("This month’s free DeepL allowance is used up. Captions continue in English; translation returns when DeepL resets.");
+      lines.forEach(l => { if (l.pending) { l.pending = false; l.failed = true; } });
+      trBackoff = Date.now() + 10 * 60 * 1000;
+    } else {
+      const why = {
+        origin: "The Worker refused this site. In Cloudflare, set ALLOWED_ORIGIN to exactly " + location.origin + " and redeploy.",
+        no_key: "The Worker has no DEEPL_KEY. Add it as a Secret in Cloudflare and redeploy.",
+        deepl_403: "DeepL rejected the key. Re-copy your DeepL API key (Free keys end in :fx) into DEEPL_KEY.",
+        deepl_456: "This month’s DeepL allowance is used up.",
+        too_long: "A caption batch was too long for the Worker."
+      }[err.code] || (err instanceof TypeError
+        ? "Couldn’t reach the Worker at " + CONFIG.translateUrl + ". Open that address in a new tab: it should say “Every Word translator is running.” If it says Page not found, the address in config.js is wrong or the Worker isn’t deployed. If it loads, ALLOWED_ORIGIN must be exactly " + location.origin + "."
+        : "The Worker answered with error " + (err.status || "") + " " + (err.code || err.message || "") + ".");
+      showTr("Translation problem: " + why + " English captions are still live.");
+      trBackoff = Date.now() + 8000;
+    }
+  } finally {
+    trBusy = false; renderPreview();
+    if (lines.some(l => l.pending)) setTimeout(pumpTranslate, 300);
+  }
+}
+function showTr(msg) { $("trNotice").textContent = msg; $("trNotice").classList.remove("hidden"); }
+
+// ---------- preview ----------
+const hhmm = t => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function renderPreview() {
+  const p = $("preview"), stick = p.scrollHeight - p.scrollTop - p.clientHeight < 60;
+  if (!lines.length && !partial) {
+    p.innerHTML = '<div class="hint">Press <b>Start captions</b> and speak, or type a line below. Each phrase shows here and on every reader’s phone.</div>';
+    return;
+  }
+  p.innerHTML = lines.slice(-80).map(l => {
+    const tr = Object.entries(l.tr || {}).map(([c, t]) => `<span class="tr">${c}: ${esc(t)}</span>`).join("");
+    const st = l.pending ? '<span class="tr state">Translating…</span>' : l.failed ? '<span class="tr state">English only</span>' : "";
+    return `<div class="pline"><time>${hhmm(l.t)}</time><span>${markRefs(esc(l.src))}</span>${tr}${st}</div>`;
+  }).join("") + (partial ? `<div class="pline"><time>now</time><span class="hint"><i>${esc(partial)}…</i></span></div>` : "");
+  if (stick) p.scrollTop = p.scrollHeight;
+}
+
+// ---------- speech recognition ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, wakeLock = null;
+function browserName() {
+  const ua = navigator.userAgent;
+  if (navigator.brave) return "Brave";
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands || []).map(b => b.brand).filter(b => !/Not.?A.?Brand|Chromium/i.test(b));
+  if (/Electron/i.test(ua)) return "an app’s built-in browser";
+  if (/OPR\//.test(ua)) return "Opera";
+  if (/Firefox\//.test(ua)) return "Firefox";
+  if (/DuckDuckGo/i.test(ua)) return "DuckDuckGo";
+  if (brands.length) return brands.join(", ");
+  if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return "Safari";
+  return "unknown browser";
+}
+function micNotice(msg) { const n = $("micNotice"); n.textContent = msg || ""; n.classList.toggle("hidden", !msg); }
+function setMicUI() {
+  $("micBtn").textContent = wantListening ? "Stop captions" : "Start captions";
+  $("micBtn").classList.toggle("on", wantListening);
+  $("micState").className = "chip" + (wantListening ? " live" : "");
+  $("micState").textContent = wantListening ? "Listening" : "Mic off";
+}
+function startMic() {
+  if (!SR) { micNotice("This browser (" + browserName() + ") doesn’t offer speech recognition. Open this page in Google Chrome or Microsoft Edge, typed straight into the address bar rather than opened from inside another app. Brave, Opera, Firefox and DuckDuckGo don’t support it. You can still type lines below."); return; }
+  rec = new SR();
+  rec.lang = CONFIG.speechLang || "en-US";
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) addLine(r[0].transcript);
+      else interim += r[0].transcript;
+    }
+    partial = interim.trim();
+    renderPreview(); pushState();
+  };
+  rec.onerror = e => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") { wantListening = false; setMicUI(); micNotice("Microphone access was blocked. Click the lock icon in the address bar, allow the microphone, then press Start captions."); }
+    else if (e.error === "network") micNotice("Speech recognition lost its internet connection. It will keep trying.");
+    else if (e.error === "audio-capture") { wantListening = false; setMicUI(); micNotice("No microphone found. Check that the soundboard or mic is plugged in and chosen as the input."); }
+  };
+  rec.onend = () => { if (wantListening) setTimeout(() => { try { rec.start(); } catch { /* already started */ } }, 250); };
+  wantListening = true;
+  try { rec.start(); } catch { /* ignore */ }
+  micNotice("");
+  setMicUI(); pushState(true);
+  if (navigator.wakeLock) navigator.wakeLock.request("screen").then(w => wakeLock = w).catch(() => {});
+}
+function stopMic() {
+  wantListening = false;
+  if (rec) { try { rec.stop(); } catch { /* ignore */ } }
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  partial = ""; setMicUI(); renderPreview(); if (started) pushState(true);
+}
+$("micBtn").onclick = () => wantListening ? stopMic() : startMic();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && wantListening && navigator.wakeLock) navigator.wakeLock.request("screen").then(w => wakeLock = w).catch(() => {});
+});
+
+// ---------- other controls ----------
+$("typeIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addLine(e.target.value); e.target.value = ""; } });
+$("typeSend").onclick = () => { addLine($("typeIn").value); $("typeIn").value = ""; $("typeIn").focus(); };
+$("copyBtn").onclick = async () => {
+  const text = $("svcTitle").value + " — " + new Date().toLocaleDateString() + "\n\n" + lines.map(l => l.src).join("\n");
+  try { await navigator.clipboard.writeText(text); $("copyMsg").textContent = "Copied " + lines.length + " lines."; }
+  catch { $("copyMsg").textContent = "Copy was blocked. Select the preview text instead."; }
+};
+let clearArmed = false;
+$("clearBtn").onclick = () => {
+  if (!clearArmed) { clearArmed = true; $("clearBtn").textContent = "Click again to clear"; setTimeout(() => { clearArmed = false; $("clearBtn").textContent = "Start a new service"; }, 4000); return; }
+  clearArmed = false; $("clearBtn").textContent = "Start a new service";
+  lines = []; partial = ""; session = Date.now().toString(36); store.set("session", session);
+  remove(ref(db, base + "/lines")).catch(writeErr);
+  renderPreview(); pushState(true);
+};
+$("printBtn").onclick = () => window.print();
