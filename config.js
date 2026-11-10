@@ -24,7 +24,25 @@ import { getAnalytics } from "firebase/analytics";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
+// ============================================================
+//  EVERY WORD — your church's settings
+//  This is the only file you need to edit. See SETUP.md.
+// ============================================================
+
+export const CONFIG = {
+  // Shown at the top of the reader page.
+  churchName: "Keyport Bible Church",
+
+  // Default room. Use different rooms if you caption more than one
+  // service or room at the same time (e.g. "main", "youth").
+  // Readers can also open  index.html?room=youth
+  room: "main",
+
+  // Language the pastor speaks (for the booth laptop's speech recognition).
+  speechLang: "en-US",
+
+  // Paste your Firebase web app config here (SETUP.md, Part 2, step 9).
+  firebase: {
   apiKey: "AIzaSyBHzTClElCuF5KYwlgEuIW88PbHUpGlm1I",
   authDomain: "every-word-1a4d2.firebaseapp.com",
   databaseURL: "https://every-word-1a4d2-default-rtdb.firebaseio.com",
