@@ -44,31 +44,62 @@ const bookIndex = name => {
   const n = name.replace(/\s+/g, " ").replace(/^(First|1st)\b/i, "1").replace(/^(Second|2nd)\b/i, "2").replace(/^(Third|3rd)\b/i, "3");
   return BOOKS.findIndex(b => new RegExp("^" + b + "$", "i").test(n));
 };
-const FIND_RE = new RegExp("\\b(" + bookAlt + ")\\s+(?:chapter\\s+)?(\\d{1,3})\\s*(?::|,?\\s*verses?\\s+)\\s*(\\d{1,3})(?:\\s*(?:-|–|through|to)\\s*(\\d{1,3}))?", "gi");
+// Chapters per book, same order as BOOKS (Song of Solomon / Song of Songs listed twice)
+const CHAPTERS = [50,40,27,36,34,24,21,4,31,24,22,25,29,36,10,13,10,42,150,31,12,8,8,66,52,5,48,12,14,3,9,1,4,7,3,3,3,2,14,4,28,16,24,21,28,16,16,13,6,6,4,4,5,3,6,4,3,1,13,5,5,3,5,1,1,1,22];
+// Book, then: "8:28" | "8.28" | "8 verse 28" | "8 28" | "828" (speech often drops the colon), optional range
+const FIND_RE = new RegExp("\\b(" + bookAlt + ")\\s+(?:chapter\\s+)?(\\d{1,4})(?:\\s*(?::|\\.|,?\\s*verses?\\s+|\\s)\\s*(\\d{1,3}))?(?:\\s*(?:-|–|through|to)\\s*(\\d{1,3}))?(?![\\d:])", "gi");
 export const MAX_VERSES = 6;
 
-// Finds references that include a verse, e.g. "Romans 8:28" or "1 John 1:8–10".
+// Finds references that include a verse, e.g. "Romans 8:28", "Romans 828", "1 John 1:8–10".
+// Each result may carry "alts": other ways to read a run-together number like "231".
 export function findRefs(text) {
   const out = [];
   for (const m of String(text).matchAll(FIND_RE)) {
     const i = bookIndex(m[1]);
     if (i < 0) continue;
-    const ch = +m[2], v1 = +m[3], v2 = m[4] ? Math.max(+m[4], v1) : v1;
-    if (!ch || !v1) continue;
-    const label = NAMES[i] + " " + ch + ":" + v1 + (v2 > v1 ? "–" + v2 : "");
-    out.push({ id: IDS[i], ch, v1, v2, label });
+    const max = CHAPTERS[i];
+    let cands = [];
+    if (m[3]) cands.push([+m[2], +m[3]]);
+    else {
+      const n = m[2];
+      if (max === 1) cands.push([1, +n]);                       // Jude 3, Philemon 4
+      else if (+n > max) {                                       // "828" → 8:28
+        for (let k = n.length - 1; k >= 1; k--) {
+          const ch = +n.slice(0, k), v = +n.slice(k);
+          if (ch >= 1 && ch <= max && v >= 1 && n[k] !== "0") cands.push([ch, v]);
+        }
+      }                                                          // otherwise chapter only: no card
+    }
+    cands = cands.filter(([c, v]) => c >= 1 && c <= max && v >= 1);
+    if (!cands.length) continue;
+    const mk = ([ch, v1]) => {
+      const v2 = m[4] ? Math.max(+m[4], v1) : v1;
+      return { id: IDS[i], ch, v1, v2, label: NAMES[i] + " " + ch + ":" + v1 + (v2 > v1 ? "–" + v2 : "") };
+    };
+    const first = mk(cands[0]);
+    first.alts = cands.slice(1).map(mk);
+    out.push(first);
   }
   return out;
 }
 
 const chapterCache = new Map();
+let relayBase = "", useRelay = false;
+// Optional relay through your Cloudflare Worker, for networks that block bible.helloao.org
+export const setBibleRelay = url => { relayBase = url ? url.replace(/\/+$/, "") : ""; };
+const getJSON = url => fetch(url).then(r => { if (!r.ok) throw new Error("bible " + r.status); return r.json(); });
+async function loadChapter(key) {
+  if (!useRelay) {
+    try { return await getJSON("https://bible.helloao.org/api/BSB/" + key + ".json"); }
+    catch (err) { if (!relayBase) throw err; useRelay = true; }
+  }
+  return getJSON(relayBase + "/bible/" + key);
+}
 // Returns { label, text, more } or null. "more" is true when the range was cut to MAX_VERSES.
 export async function fetchVerses(ref) {
   const key = ref.id + "/" + ref.ch;
   if (!chapterCache.has(key)) {
-    chapterCache.set(key, fetch("https://bible.helloao.org/api/BSB/" + key + ".json")
-      .then(r => { if (!r.ok) throw new Error("bible " + r.status); return r.json(); })
-      .catch(err => { chapterCache.delete(key); throw err; }));
+    chapterCache.set(key, loadChapter(key).catch(err => { chapterCache.delete(key); throw err; }));
   }
   const data = await chapterCache.get(key);
   const content = (data && data.chapter && data.chapter.content) || [];

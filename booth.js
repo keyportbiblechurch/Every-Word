@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured, findRefs, fetchVerses } from "./common.js";
+import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured, findRefs, fetchVerses, setBibleRelay } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -39,6 +39,7 @@ let started = false, lines = [], partial = "", wantListening = false, session = 
 let selLangs = store.get("langs", CONFIG.defaultLanguages || []);
 let trBackoff = 0, trBusy = false;
 const canTranslate = !!CONFIG.translateUrl;
+setBibleRelay(CONFIG.translateUrl);
 
 function startConsole() {
   if (started) return; started = true;
@@ -117,11 +118,21 @@ async function attachVerses(l) {
   if (!refs.length) return;
   const cards = [];
   for (const r of refs.slice(0, 3)) {
-    recentRefs.push(r.label);
-    try {
-      const v = await fetchVerses(r);
-      if (v) cards.push(v.more ? { label: v.label, text: v.text, note: "Showing verses " + v.more } : { label: v.label, text: v.text });
-    } catch (err) { console.warn("Verse lookup failed for", r.label, err); }
+    for (const cand of [r, ...(r.alts || [])]) {          // e.g. "Psalm 231" tries 23:1, then 2:31
+      try {
+        const v = await fetchVerses(cand);
+        if (!v) continue;
+        recentRefs.push(cand.label);
+        cards.push(v.more ? { label: v.label, text: v.text, note: "Showing verses " + v.more } : { label: v.label, text: v.text });
+        $("verseNotice").classList.add("hidden");
+        break;
+      } catch (err) {
+        console.warn("Verse lookup failed for", cand.label, err);
+        $("verseNotice").textContent = "Couldn’t load " + cand.label + ". This network may block the Bible service, and the backup route through your Cloudflare Worker didn’t answer either. Make sure the latest worker.js is deployed. Captions are unaffected.";
+        $("verseNotice").classList.remove("hidden");
+        break;
+      }
+    }
   }
   if (!cards.length) return;
   l.scripture = cards;
