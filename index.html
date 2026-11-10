@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Every Word Live Captions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="viewer">
+  <div class="vbar">
+    <div class="brand"><span id="church">Every Word</span> <span class="chip" id="status">Connecting…</span></div>
+    <div class="ctrl">
+      <select id="lang" class="btn" aria-label="Caption language"><option value="EN">English</option></select>
+      <button class="btn" id="smaller" aria-label="Smaller text">A−</button>
+      <button class="btn" id="bigger" aria-label="Larger text">A+</button>
+      <button class="btn" id="hcBtn" aria-pressed="false">High contrast</button>
+      <button class="btn hidden" id="origBtn" aria-pressed="true">Show English too</button>
+    </div>
+  </div>
+  <div class="captions" id="captions" aria-live="polite">
+    <div class="example-note" id="exampleNote">Example captions. When the service starts, the sermon will appear here as it is spoken.</div>
+    <div class="cap-inner" id="capInner"></div>
+  </div>
+  <button class="btn primary jump hidden" id="jump">Jump to live ↓</button>
+</div>
+<script type="module" src="reader.js"></script>
+</body>
+</html>

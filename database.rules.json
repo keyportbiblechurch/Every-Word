@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": true,
+        ".write": "auth != null && auth.token.email == 'booth@yourchurch.org'"
+      }
+    }
+  }
+}

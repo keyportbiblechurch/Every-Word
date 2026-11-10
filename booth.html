@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Every Word Sound Booth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+<!-- Sign in -->
+<div class="login panel hidden" id="login">
+  <h1 style="margin:0;font-size:24px">Every Word · Sound Booth</h1>
+  <p class="hint" style="margin:0">Sign in with the booth account you created in Firebase.</p>
+  <div class="notice hidden" id="loginMsg"></div>
+  <form id="loginForm" style="display:flex;flex-direction:column;gap:10px">
+    <label class="field" for="email">Email <input id="email" type="email" autocomplete="username" required></label>
+    <label class="field" for="password">Password <input id="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Sign in</button>
+  </form>
+</div>
+
+<!-- Not configured -->
+<div class="login panel hidden" id="setupNeeded">
+  <h1 style="margin:0;font-size:24px">Almost there</h1>
+  <p style="margin:0">Open <b>config.js</b> and paste in your Firebase settings. SETUP.md, Part 2, walks you through it.</p>
+</div>
+
+<!-- Console -->
+<div class="booth hidden" id="booth">
+  <header>
+    <h1>Every Word · Sound Booth</h1>
+    <span class="chip" id="conn">Connecting…</span>
+    <button class="btn" id="signOut">Sign out</button>
+  </header>
+
+  <div class="panel">
+    <h2>Live captions</h2>
+    <div class="mic-row">
+      <button class="btn primary mic" id="micBtn">Start captions</button>
+      <span class="chip" id="micState">Mic off</span>
+    </div>
+    <div class="notice hidden" id="micNotice"></div>
+    <div class="preview" id="preview"></div>
+    <div class="row">
+      <input id="typeIn" placeholder="Type a line and press Enter (backup if the mic fails)" aria-label="Type a caption line">
+      <button class="btn" id="typeSend">Send</button>
+    </div>
+    <div class="ctrl">
+      <button class="btn" id="copyBtn">Copy transcript</button>
+      <button class="btn" id="clearBtn">Start a new service</button>
+      <span class="hint" id="copyMsg"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Service</h2>
+    <label class="field" for="svcTitle">Title shown to readers <input id="svcTitle" value="Sunday Worship"></label>
+    <h2>Translate into</h2>
+    <div class="notice hidden" id="trNotice"></div>
+    <div class="langs" id="langBox"></div>
+    <label class="field" for="vocab">Sermon fixes
+      <span class="hint">One per line as <b>heard = correct</b>. Applied before captions go out. Example: <i>never can answer = Nebuchadnezzar</i></span>
+      <textarea id="vocab">never can answer = Nebuchadnezzar
+propitiation = propitiation</textarea>
+    </label>
+    <h2>Readers open</h2>
+    <div class="qr" id="qr"></div>
+    <div class="share-url" id="shareUrl"></div>
+    <button class="btn" id="printBtn">Print QR card for the bulletin</button>
+  </div>
+</div>
+
+<div class="print-card" id="printCard">
+  <h2>Live Captions</h2>
+  <p>Scan with your phone camera to read the sermon live, in large print or another language.</p>
+  <div id="qrPrint"></div>
+  <p class="print-url" id="printUrl"></p>
+</div>
+
+<script type="module" src="booth.js"></script>
+</body>
+</html>
