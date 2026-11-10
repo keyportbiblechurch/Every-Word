@@ -15,8 +15,9 @@ let lastBeat = 0, gotReal = false, connected = false;
 
 // Example lines so the page never opens empty
 [
-  { src: "Turn with me to Romans 10:17.", tr: { ES: "Acompáñenme a Romanos 10:17." } },
-  { src: "Consequently, faith comes by hearing, and hearing by the word of Christ.", tr: { ES: "Así que la fe viene por el oír, y el oír por la palabra de Cristo." } },
+  { src: "Turn with me to Romans 10:17.", tr: { ES: "Acompáñenme a Romanos 10:17." },
+    scripture: [{ label: "Romans 10:17", text: "Consequently, faith comes by hearing, and hearing by the word of Christ." }] },
+  { src: "Paul is telling us how the gospel travels.", tr: { ES: "Pablo nos dice cómo viaja el evangelio." } },
   { src: "God uses ordinary voices to carry extraordinary news.", tr: { ES: "Dios usa voces comunes para llevar noticias extraordinarias." } }
 ].forEach((l, i) => { lines.set("ex" + i, l); order.push("ex" + i); });
 
@@ -46,7 +47,8 @@ function render() {
     const t = lang !== "EN" && l.tr && l.tr[lang];
     const main = t || en, orig = t && showOrig ? en : "";
     const dir = t && RTL.has(lang) ? ' dir="rtl"' : "";
-    return `<p class="cap${i < n - 6 ? " old" : ""}"${dir}>${markRefs(esc(main))}${orig ? `<span class="orig" dir="ltr">${markRefs(esc(orig))}</span>` : ""}</p>`;
+    const cards = (l.scripture || []).map(s => s && s.text ? `<blockquote class="verse-card" dir="ltr"><cite>${esc(s.label)} <span>BSB</span></cite>${esc(s.text)}${s.note ? `<small>${esc(s.note)}</small>` : ""}</blockquote>` : "").join("");
+    return `<p class="cap${i < n - 6 ? " old" : ""}"${dir}>${markRefs(esc(main))}${orig ? `<span class="orig" dir="ltr">${markRefs(esc(orig))}</span>` : ""}</p>${cards}`;
   }).join("");
   if (partial) html += `<p class="cap partial">${lang === "EN" ? esc(partial) : ""}…</p>`;
   cap.innerHTML = html;
@@ -91,7 +93,11 @@ if (isConfigured(CONFIG)) {
     clearExamples();
     const v = s.val() || {};
     if (!lines.has(s.key)) order.push(s.key);
-    lines.set(s.key, { src: String(v.src || ""), tr: v.tr && typeof v.tr === "object" ? v.tr : {} });
+    lines.set(s.key, {
+      src: String(v.src || ""),
+      tr: v.tr && typeof v.tr === "object" ? v.tr : {},
+      scripture: Array.isArray(v.scripture) ? v.scripture.slice(0, 3) : []
+    });
     render();
   };
   onChildAdded(q, upsert);

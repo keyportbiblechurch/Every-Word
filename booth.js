@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured } from "./common.js";
+import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured, findRefs, fetchVerses } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -107,6 +107,26 @@ function addLine(text) {
   set(r, { src: text, t: serverTimestamp() }).catch(writeErr);
   renderPreview();
   pumpTranslate();
+  attachVerses(l);
+}
+
+// ---------- full Scripture cards (BSB) ----------
+const recentRefs = [];
+async function attachVerses(l) {
+  const refs = findRefs(l.src).filter(r => !recentRefs.slice(-6).includes(r.label));
+  if (!refs.length) return;
+  const cards = [];
+  for (const r of refs.slice(0, 3)) {
+    recentRefs.push(r.label);
+    try {
+      const v = await fetchVerses(r);
+      if (v) cards.push(v.more ? { label: v.label, text: v.text, note: "Showing verses " + v.more } : { label: v.label, text: v.text });
+    } catch (err) { console.warn("Verse lookup failed for", r.label, err); }
+  }
+  if (!cards.length) return;
+  l.scripture = cards;
+  set(ref(db, `${base}/lines/${l.key}/scripture`), cards).catch(writeErr);
+  renderPreview();
 }
 
 // ---------- translation (Cloudflare Worker → DeepL) ----------
@@ -140,7 +160,16 @@ async function pumpTranslate() {
       lines.forEach(l => { if (l.pending) { l.pending = false; l.failed = true; } });
       trBackoff = Date.now() + 10 * 60 * 1000;
     } else {
-      showTr("Translation hit a problem and will retry in a few seconds. English captions are still live.");
+      const why = {
+        origin: "The Worker refused this site. In Cloudflare, set ALLOWED_ORIGIN to exactly " + location.origin + " and redeploy.",
+        no_key: "The Worker has no DEEPL_KEY. Add it as a Secret in Cloudflare and redeploy.",
+        deepl_403: "DeepL rejected the key. Re-copy your DeepL API key (Free keys end in :fx) into DEEPL_KEY.",
+        deepl_456: "This month’s DeepL allowance is used up.",
+        too_long: "A caption batch was too long for the Worker."
+      }[err.code] || (err instanceof TypeError
+        ? "Couldn’t reach the Worker at " + CONFIG.translateUrl + ". Open that address in a new tab: it should say “Every Word translator is running.” If it says Page not found, the address in config.js is wrong or the Worker isn’t deployed. If it loads, ALLOWED_ORIGIN must be exactly " + location.origin + "."
+        : "The Worker answered with error " + (err.status || "") + " " + (err.code || err.message || "") + ".");
+      showTr("Translation problem: " + why + " English captions are still live.");
       trBackoff = Date.now() + 8000;
     }
   } finally {
@@ -161,7 +190,8 @@ function renderPreview() {
   p.innerHTML = lines.slice(-80).map(l => {
     const tr = Object.entries(l.tr || {}).map(([c, t]) => `<span class="tr">${c}: ${esc(t)}</span>`).join("");
     const st = l.pending ? '<span class="tr state">Translating…</span>' : l.failed ? '<span class="tr state">English only</span>' : "";
-    return `<div class="pline"><time>${hhmm(l.t)}</time><span>${markRefs(esc(l.src))}</span>${tr}${st}</div>`;
+    const sc = (l.scripture || []).map(s => `<span class="tr verse-mini"><b>${esc(s.label)}</b> ${esc(s.text)}</span>`).join("");
+    return `<div class="pline"><time>${hhmm(l.t)}</time><span>${markRefs(esc(l.src))}</span>${sc}${tr}${st}</div>`;
   }).join("") + (partial ? `<div class="pline"><time>now</time><span class="hint"><i>${esc(partial)}…</i></span></div>` : "");
   if (stick) p.scrollTop = p.scrollHeight;
 }
