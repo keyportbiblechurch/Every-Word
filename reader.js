@@ -10,7 +10,7 @@ document.title = (CONFIG.churchName ? CONFIG.churchName + " · " : "") + "Live C
 
 let size = store.get("size", 30), lang = store.get("lang", "EN");
 let hc = store.get("hc", false), showOrig = store.get("orig", true);
-let lines = new Map(), order = [], partial = "", langs = ["ES"], title = "", live = false;
+let lines = new Map(), order = [], partial = "", langs = ["ES"], title = "", live = false, paused = false;
 let lastBeat = 0, gotReal = false, connected = false;
 
 // Example lines so the page never opens empty
@@ -50,7 +50,8 @@ function render() {
     const cards = (l.scripture || []).map(s => s && s.text ? `<blockquote class="verse-card" dir="ltr"><cite>${esc(s.label)} <span>BSB</span></cite>${esc(s.text)}${s.note ? `<small>${esc(s.note)}</small>` : ""}</blockquote>` : "").join("");
     return `<p class="cap${i < n - 6 ? " old" : ""}"${dir}>${markRefs(esc(main))}${orig ? `<span class="orig" dir="ltr">${markRefs(esc(orig))}</span>` : ""}</p>${cards}`;
   }).join("");
-  if (partial) html += `<p class="cap partial">${lang === "EN" ? esc(partial) : ""}…</p>`;
+  if (paused) html += `<p class="paused-banner">Captions are paused during prayer. They’ll pick up again shortly.</p>`;
+  else if (partial) html += `<p class="cap partial">${lang === "EN" ? esc(partial) : ""}…</p>`;
   cap.innerHTML = html;
   if (stick) box.scrollTop = box.scrollHeight;
   $("jump").classList.toggle("hidden", atBottom());
@@ -59,6 +60,7 @@ function setStatus() {
   const s = $("status");
   const fresh = Date.now() - lastBeat < 60000;
   if (!connected) { s.className = "chip warn"; s.textContent = isConfigured(CONFIG) ? "Connecting…" : "Not set up yet"; }
+  else if (paused && fresh) { s.className = "chip warn"; s.textContent = "Paused for prayer"; }
   else if (live && fresh) { s.className = "chip live"; s.textContent = title ? "Live · " + title : "Live"; }
   else if (gotReal) { s.className = "chip warn"; s.textContent = "Paused"; }
   else { s.className = "chip"; s.textContent = "Waiting for service"; }
@@ -83,7 +85,7 @@ if (isConfigured(CONFIG)) {
   onValue(ref(db, ".info/connected"), s => { connected = !!s.val(); setStatus(); });
   onValue(ref(db, `rooms/${room}/state`), s => {
     const st = s.val() || {};
-    live = !!st.live; title = String(st.title || ""); partial = String(st.partial || "");
+    live = !!st.live; paused = !!st.paused; title = String(st.title || ""); partial = paused ? "" : String(st.partial || "");
     langs = Array.isArray(st.langs) ? st.langs : [];
     lastBeat = Date.now();
     fillLangs(); render(); setStatus();

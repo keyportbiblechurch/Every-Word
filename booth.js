@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured, findRefs, fetchVerses, setBibleRelay } from "./common.js";
+import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -63,6 +63,11 @@ function startConsole() {
   };
   if (!canTranslate) showTr("Translation is off. Add your Cloudflare Worker URL to config.js to turn it on (SETUP.md, Part 3).");
 
+  $("sermonRefs").value = store.get("sermonRefs", $("sermonRefs").value);
+  let refT = null;
+  $("sermonRefs").oninput = e => { store.set("sermonRefs", e.target.value); clearTimeout(refT); refT = setTimeout(loadPlanned, 700); };
+  loadPlanned();
+
   onValue(ref(db, ".info/connected"), s => {
     const ok = !!s.val();
     $("conn").className = "chip" + (ok ? " live" : " warn");
@@ -80,7 +85,8 @@ function pushState(now) {
     stT = null; stLast = Date.now();
     set(ref(db, base + "/state"), {
       title: $("svcTitle").value.slice(0, 80),
-      live: wantListening,
+      live: wantListening || paused,
+      paused,
       langs: canTranslate ? selLangs : [],
       partial: partial.slice(-240),
       session, beat: serverTimestamp()
@@ -113,8 +119,14 @@ function addLine(text) {
 
 // ---------- full Scripture cards (BSB) ----------
 const recentRefs = [];
-async function attachVerses(l) {
-  const refs = findRefs(l.src).filter(r => !recentRefs.slice(-6).includes(r.label));
+const isRecent = label => recentRefs.slice(-6).includes(label);
+async function attachVerses(l, force) {
+  let refs = findRefs(l.src).filter(r => force || !isRecent(r.label));
+  // Mumbled or partial reference ("Romans 8...") → match today's planned Scripture by book + chapter or verse number
+  if (!refs.length && !findRefs(l.src).length) {
+    const nums = (l.src.match(/\d+/g) || []).map(Number);
+    refs = planned.filter(p => (force || !isRecent(p.label)) && bookMentioned(l.src, p.id) && (nums.includes(p.ch) || nums.includes(p.v1))).slice(0, 1);
+  }
   if (!refs.length) return;
   const cards = [];
   for (const r of refs.slice(0, 3)) {
@@ -164,7 +176,10 @@ async function pumpTranslate() {
       if (Object.keys(tr).length) update(ref(db, `${base}/lines/${l.key}/tr`), tr).catch(writeErr);
       else l.failed = true;
     });
-    $("trNotice").classList.add("hidden");
+    const failed = Object.keys(data.failed || {});
+    if (failed.length) {
+      showTr("Not translating " + failed.map(c => LANGS[c] || c).join(", ") + ": DeepL refused " + (failed.length > 1 ? "these languages" : "this language") + " (" + Object.values(data.failed).join(", ") + "). It may not be included in your DeepL plan. The other languages are working.");
+    } else $("trNotice").classList.add("hidden");
   } catch (err) {
     if (err.code === "quota") {
       showTr("This month’s free DeepL allowance is used up. Captions continue in English; translation returns when DeepL resets.");
@@ -190,19 +205,83 @@ async function pumpTranslate() {
 }
 function showTr(msg) { $("trNotice").textContent = msg; $("trNotice").classList.remove("hidden"); }
 
+// ---------- today's Scripture (preloaded) ----------
+let planned = [];
+const toCard = v => v.more ? { label: v.label, text: v.text, note: "Showing verses " + v.more } : { label: v.label, text: v.text };
+function loadPlanned() {
+  planned = [];
+  $("sermonRefs").value.split("\n").forEach(line => findRefs(tidyRefs(line)).forEach(r => {
+    if (!planned.some(p => p.label === r.label)) planned.push(r);
+  }));
+  $("refList").innerHTML = planned.length
+    ? planned.map((r, i) => `<div class="ref-item"><span class="ref">${esc(r.label)}</span><span class="hint" id="pl-${i}">Loading…</span><button class="btn" data-show="${i}">Show</button></div>`).join("")
+    : '<span class="hint">No references recognized yet. Write them like Romans 8:28 or John 3:16–18.</span>';
+  planned.forEach((r, i) => fetchVerses(r)
+    .then(v => { const el = $("pl-" + i); if (el) el.textContent = v ? "Ready" : "Verse not found: check the reference"; })
+    .catch(() => { const el = $("pl-" + i); if (el) el.textContent = "Couldn’t load right now"; }));
+}
+$("refList").addEventListener("click", async e => {
+  const b = e.target.closest("[data-show]"); if (!b) return;
+  const r = planned[+b.dataset.show]; if (!r) return;
+  b.disabled = true;
+  try {
+    const v = await fetchVerses(r);
+    if (!v) throw new Error("not found");
+    const card = toCard(v);
+    const nr = push(ref(db, base + "/lines"));
+    const l = { key: nr.key, src: v.label, t: Date.now(), tr: {}, scripture: [card] };
+    lines.push(l); recentRefs.push(v.label);
+    set(nr, { src: v.label, t: serverTimestamp(), scripture: [card] }).catch(writeErr);
+    renderPreview();
+    b.textContent = "Sent ✓"; setTimeout(() => { b.textContent = "Show"; b.disabled = false; }, 2500);
+  } catch { b.textContent = "Couldn’t load"; setTimeout(() => { b.textContent = "Show"; b.disabled = false; }, 2500); }
+});
+
+// ---------- fix a line ----------
+let editing = null;
+function openEdit(l) {
+  editing = l;
+  $("editIn").value = l.src;
+  $("editWhen").textContent = "(sent " + hhmm(l.t) + ")";
+  $("editBar").classList.remove("hidden");
+  $("editIn").focus(); $("editIn").select();
+  renderPreview();
+}
+function closeEdit() { editing = null; $("editBar").classList.add("hidden"); renderPreview(); }
+function saveEdit() {
+  const l = editing, text = $("editIn").value.trim();
+  closeEdit();
+  if (!l || !text || text === l.src) return;
+  l.src = text; l.tr = {}; l.failed = false;
+  l.pending = canTranslate && selLangs.length > 0;
+  update(ref(db, `${base}/lines/${l.key}`), { src: text, tr: null }).catch(writeErr);
+  renderPreview(); pumpTranslate(); attachVerses(l, true);
+}
+$("preview").addEventListener("click", e => {
+  const row = e.target.closest(".pline[data-key]"); if (!row) return;
+  const l = lines.find(x => x.key === row.dataset.key);
+  if (l) openEdit(l);
+});
+$("editSave").onclick = saveEdit;
+$("editCancel").onclick = closeEdit;
+$("editIn").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
+  else if (e.key === "Escape") { e.preventDefault(); closeEdit(); }
+});
+
 // ---------- preview ----------
 const hhmm = t => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 function renderPreview() {
   const p = $("preview"), stick = p.scrollHeight - p.scrollTop - p.clientHeight < 60;
   if (!lines.length && !partial) {
-    p.innerHTML = '<div class="hint">Press <b>Start captions</b> and speak, or type a line below. Each phrase shows here and on every reader’s phone.</div>';
+    p.innerHTML = '<div class="hint">Press <b>Start captions</b> and speak, or type a line below. Each phrase shows here and on every reader’s phone. Click any line to fix a mis-heard word.</div>';
     return;
   }
   p.innerHTML = lines.slice(-80).map(l => {
     const tr = Object.entries(l.tr || {}).map(([c, t]) => `<span class="tr">${c}: ${esc(t)}</span>`).join("");
     const st = l.pending ? '<span class="tr state">Translating…</span>' : l.failed ? '<span class="tr state">English only</span>' : "";
     const sc = (l.scripture || []).map(s => `<span class="tr verse-mini"><b>${esc(s.label)}</b> ${esc(s.text)}</span>`).join("");
-    return `<div class="pline"><time>${hhmm(l.t)}</time><span>${markRefs(esc(l.src))}</span>${sc}${tr}${st}</div>`;
+    return `<div class="pline${editing === l ? " editing" : ""}" data-key="${esc(l.key)}" title="Click to fix this line"><time>${hhmm(l.t)}</time><span>${markRefs(esc(l.src))}</span>${sc}${tr}${st}</div>`;
   }).join("") + (partial ? `<div class="pline"><time>now</time><span class="hint"><i>${esc(partial)}…</i></span></div>` : "");
   if (stick) p.scrollTop = p.scrollHeight;
 }
@@ -236,6 +315,7 @@ function startMic() {
   rec.continuous = true;
   rec.interimResults = true;
   rec.onresult = e => {
+    if (!wantListening) return;   // ignore words that arrive after Stop or Pause
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const r = e.results[i];
@@ -252,6 +332,7 @@ function startMic() {
   };
   rec.onend = () => { if (wantListening) setTimeout(() => { try { rec.start(); } catch { /* already started */ } }, 250); };
   wantListening = true;
+  if (paused) { paused = false; setPauseUI(); }
   try { rec.start(); } catch { /* ignore */ }
   micNotice("");
   setMicUI(); pushState(true);
@@ -264,6 +345,23 @@ function stopMic() {
   partial = ""; setMicUI(); renderPreview(); if (started) pushState(true);
 }
 $("micBtn").onclick = () => wantListening ? stopMic() : startMic();
+
+// ---------- pause for prayer ----------
+let paused = false;
+function setPauseUI() {
+  $("pauseBtn").textContent = paused ? "Resume captions" : "Pause for prayer";
+  $("pauseBtn").classList.toggle("on", paused);
+  if (paused) { $("micState").className = "chip warn"; $("micState").textContent = "Paused · readers see “paused for prayer”"; }
+}
+$("pauseBtn").onclick = () => {
+  if (!paused) {
+    if (wantListening) stopMic();
+    paused = true; setPauseUI(); pushState(true);
+  } else {
+    startMic();   // also clears the pause
+    setPauseUI(); setMicUI(); pushState(true);
+  }
+};
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && wantListening && navigator.wakeLock) navigator.wakeLock.request("screen").then(w => wakeLock = w).catch(() => {});
 });

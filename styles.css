@@ -73,6 +73,16 @@ button { cursor: pointer; }
 .mic.on { background: #B3261E; border-color: #B3261E; color: #fff; }
 .preview { height: 380px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: 19px; display: flex; flex-direction: column; gap: 10px; }
 .pline { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; }
+.pline[data-key] { cursor: pointer; border-radius: 8px; padding: 2px 4px; margin: -2px -4px; }
+.pline[data-key]:hover { background: var(--ref-bg); }
+.pline.editing { outline: 2px solid var(--accent); }
+.edit-bar { display: flex; flex-direction: column; gap: 8px; border: 2px solid var(--accent); border-radius: 12px; padding: 12px; }
+.ref-list { display: flex; flex-direction: column; gap: 6px; }
+.ref-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ref-item .hint { margin-right: auto; }
+.ref-item .btn { min-height: 36px; padding: 4px 12px; }
+#pauseBtn.on { background: var(--warn); border-color: var(--warn); color: var(--bg); }
+.paused-banner { font-size: 0.7em; border: 2px dashed var(--warn); color: var(--ink); border-radius: 12px; padding: 0.6em 0.8em; margin: 0.3em 0 0; }
 .pline time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 4px; }
 .pline .tr { grid-column: 2; font-size: 15px; color: var(--muted); }
 .pline .state { font-size: 12px; font-weight: 700; color: var(--warn); }

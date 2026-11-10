@@ -43,11 +43,22 @@
     <h2>Live captions</h2>
     <div class="mic-row">
       <button class="btn primary mic" id="micBtn">Start captions</button>
+      <button class="btn mic" id="pauseBtn">Pause for prayer</button>
       <span class="chip" id="micState">Mic off</span>
     </div>
     <div class="notice hidden" id="micNotice"></div>
     <div class="notice hidden" id="verseNotice"></div>
     <div class="preview" id="preview"></div>
+    <div class="edit-bar hidden" id="editBar">
+      <label class="field" for="editIn">Fix this line <span class="hint" id="editWhen"></span>
+        <input id="editIn" autocomplete="off">
+      </label>
+      <div class="ctrl">
+        <button class="btn primary" id="editSave">Save fix</button>
+        <button class="btn" id="editCancel">Cancel</button>
+        <span class="hint">The corrected line replaces the old one on every reader’s screen.</span>
+      </div>
+    </div>
     <div class="row">
       <input id="typeIn" placeholder="Type a line and press Enter (backup if the mic fails)" aria-label="Type a caption line">
       <button class="btn" id="typeSend">Send</button>
@@ -62,6 +73,12 @@
   <div class="panel">
     <h2>Service</h2>
     <label class="field" for="svcTitle">Title shown to readers <input id="svcTitle" value="Sunday Worship"></label>
+    <h2>Today’s Scripture</h2>
+    <label class="field" for="sermonRefs">References in this sermon
+      <span class="hint">One per line, e.g. <i>Romans 8:28–30</i>. Cards appear even if a reference is mumbled, and <b>Show</b> sends any one to readers right away.</span>
+      <textarea id="sermonRefs" style="min-height:90px">Romans 8:28–30</textarea>
+    </label>
+    <div class="ref-list" id="refList"></div>
     <h2>Translate into</h2>
     <div class="notice hidden" id="trNotice"></div>
     <div class="langs" id="langBox"></div>

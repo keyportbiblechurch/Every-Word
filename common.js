@@ -11,6 +11,8 @@ export const LANGS = {
   "PT-BR": "Português (Portuguese)",
   FR: "Français (French)",
   DE: "Deutsch (German)",
+  PL: "Polski (Polish)",
+  TH: "ไทย (Thai)",
   AR: "العربية (Arabic)"
 };
 export const RTL = new Set(["AR"]);
@@ -49,6 +51,12 @@ const CHAPTERS = [50,40,27,36,34,24,21,4,31,24,22,25,29,36,10,13,10,42,150,31,12
 // Book, then: "8:28" | "8.28" | "8 verse 28" | "8 28" | "828" (speech often drops the colon), optional range
 const FIND_RE = new RegExp("\\b(" + bookAlt + ")\\s+(?:chapter\\s+)?(\\d{1,4})(?:\\s*(?::|\\.|,?\\s*verses?\\s+|\\s)\\s*(\\d{1,3}))?(?:\\s*(?:-|–|through|to)\\s*(\\d{1,3}))?(?![\\d:])", "gi");
 export const MAX_VERSES = 6;
+
+// True if the text names the given book (by ID), e.g. bookMentioned("back in Romans eight", "ROM")
+export function bookMentioned(text, id) {
+  return BOOKS.some((b, i) => IDS[i] === id &&
+    new RegExp("\\b" + b.replace(/^([123]) /, "(?:$1|First|Second|Third|1st|2nd|3rd) ") + "\\b", "i").test(text));
+}
 
 // Finds references that include a verse, e.g. "Romans 8:28", "Romans 828", "1 John 1:8–10".
 // Each result may carry "alts": other ways to read a run-together number like "231".
