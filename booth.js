@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { LANGS, esc, store, roomName, markRefs, tidyRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
+import { LANGS, esc, store, roomName, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -104,7 +104,7 @@ function writeErr(err) {
 
 const fixes = () => $("vocab").value.split("\n").map(s => s.split(/\s*(?:=>|→|=)\s*/)).filter(p => p.length === 2 && p[0] && p[1]);
 const applyFixes = t => fixes().reduce((s, [a, b]) => s.replace(new RegExp("\\b" + a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi"), b), t);
-const tidy = t => { t = tidyRefs(applyFixes(t.trim())); return t.charAt(0).toUpperCase() + t.slice(1); };
+const tidy = t => { t = resolveRefs(tidyRefs(applyFixes(t.trim())), planned); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 function addLine(text) {
   text = tidy(text);

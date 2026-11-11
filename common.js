@@ -67,6 +67,23 @@ const CHAPTERS = [50,40,27,36,34,24,21,4,31,24,22,25,29,36,10,13,10,42,150,31,12
 const FIND_RE = new RegExp("\\b(" + bookAlt + ")\\s+(?:chapter\\s+)?(\\d{1,4})(?:\\s*(?::|\\.|,?\\s*verses?\\s+|\\s)\\s*(\\d{1,3}))?(?:\\s*(?:-|–|through|to)\\s*(\\d{1,3}))?(?![\\d:])", "gi");
 export const MAX_VERSES = 6;
 
+const bookPattern = id => BOOKS.filter((b, i) => IDS[i] === id).map(b => b.replace(/^([123]) /, "(?:$1|First|Second|Third|1st|2nd|3rd) ")).join("|");
+
+// Rewrites references that speech recognition ran together, so captions read correctly:
+//  1. references on today's Scripture list: "Genesis 11" → "Genesis 1:1" (when Genesis 1:1 is planned)
+//  2. unambiguous ones: "Romans 828" → "Romans 8:28", "John 316" → "John 3:16"
+export function resolveRefs(text, planned = []) {
+  for (const p of planned) {
+    const re = new RegExp("\\b(?:" + bookPattern(p.id) + ")\\s+(?:chapter\\s+)?" + p.ch + "\\s*(?:,?\\s*verses?\\s+)?" + p.v1 +
+      "(?:\\s*(?:-|–|through|to)\\s*(\\d{1,3}))?\\b(?![:\\d])", "gi");
+    text = text.replace(re, (m, v2) => p.label.replace(/[–-]\d+$/, "").replace(/:\d+$/, ":" + p.v1) + (v2 ? "–" + v2 : ""));
+  }
+  for (const r of findRefs(text)) {
+    if (r.runTogether && !r.alts.length && r.raw && !/:/.test(r.raw)) text = text.replace(r.raw, r.label);
+  }
+  return text;
+}
+
 // True if the text names the given book (by ID), e.g. bookMentioned("back in Romans eight", "ROM")
 export function bookMentioned(text, id) {
   return BOOKS.some((b, i) => IDS[i] === id &&
@@ -101,6 +118,8 @@ export function findRefs(text) {
     };
     const first = mk(cands[0]);
     first.alts = cands.slice(1).map(mk);
+    first.raw = m[0];
+    first.runTogether = !m[3];
     out.push(first);
   }
   return out;
