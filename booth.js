@@ -1,13 +1,17 @@
 import { CONFIG } from "./config.js";
-import { LANGS, esc, store, roomName, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
+import { LANGS, esc, store, roomName, groupCodeParam, groupRoomPath, newGroupCode, prettyCode, normCode, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const $ = id => document.getElementById(id);
-const room = roomName(CONFIG.room);
+// Which room: a private group (?code=GRACE-HARBOR-482) or a named public room (?room=main)
+const groupCode = prettyCode(groupCodeParam());
+const isGroup = normCode(groupCode).length >= 6;
+const room = isGroup ? await groupRoomPath(groupCode) : roomName(CONFIG.room);
 const base = `rooms/${room}`;
-const readerUrl = new URL("index.html" + (room !== (CONFIG.room || "main") ? "?room=" + room : ""), location.href).href;
+const readerUrl = new URL("index.html" + (isGroup ? "?code=" + encodeURIComponent(groupCode) : room !== (CONFIG.room || "main") ? "?room=" + room : ""), location.href).href;
+const roomLabel = isGroup ? "private group " + groupCode : "room " + room;
 
 if (!isConfigured(CONFIG)) {
   $("setupNeeded").classList.remove("hidden");
@@ -41,8 +45,10 @@ let trBackoff = 0, trBusy = false;
 const canTranslate = !!CONFIG.translateUrl;
 setBibleRelay(CONFIG.translateUrl);
 
-function startConsole() {
+async function startConsole() {
   if (started) return; started = true;
+  renderRoomPanel();
+  await clearIfStale();   // must run before the booth announces itself, or the old meeting looks current
   $("shareUrl").textContent = readerUrl;
   $("printUrl").textContent = readerUrl;
   try {
@@ -50,9 +56,10 @@ function startConsole() {
     new QRCode($("qrPrint"), { text: readerUrl, width: 300, height: 300 });
   } catch { $("qr").classList.add("hidden"); }
 
-  $("svcTitle").value = store.get("title", "Sunday Worship");
+  $("svcTitle").value = store.get("title-" + room, isGroup ? "Small group" : store.get("title", "Sunday Worship"));
   $("vocab").value = store.get("vocab", $("vocab").value);
-  $("svcTitle").oninput = e => { store.set("title", e.target.value); pushState(); };
+  $("svcTitle").oninput = e => { store.set("title-" + room, e.target.value); pushState(); };
+
   $("vocab").oninput = e => store.set("vocab", e.target.value);
 
   $("langBox").innerHTML = Object.entries(LANGS).map(([c, n]) =>
@@ -72,7 +79,7 @@ function startConsole() {
   onValue(ref(db, ".info/connected"), s => {
     const ok = !!s.val();
     $("conn").className = "chip" + (ok ? " live" : " warn");
-    $("conn").textContent = ok ? "Connected · room " + room : "Offline: check the internet";
+    $("conn").textContent = ok ? "Connected · " + roomLabel : "Offline: check the internet";
   });
   setInterval(() => pushState(true), 20000); // heartbeat for readers
   pushState(true);
@@ -98,8 +105,36 @@ function pushState(now) {
 }
 function writeErr(err) {
   $("conn").className = "chip warn";
-  $("conn").textContent = "Can’t write: check database rules (SETUP.md, Part 2)";
+  $("conn").textContent = "Can’t write: check that you’re signed in with the booth login named in your database rules (SETUP.md, Part 2)";
   console.error(err);
+}
+
+// ---------- rooms ----------
+function renderRoomPanel() {
+  $("roomInfo").innerHTML = isGroup
+    ? `<b>Private group</b> · code <span class="code">${esc(groupCode)}</span><br><span class="hint">Only people with this code can read along, wherever they are. Share it with your group only.</span>`
+    : `<b>Main service</b> · public link<br><span class="hint">Anyone with the link can read along.</span>`;
+  $("roomBack").classList.toggle("hidden", !isGroup);
+}
+const openGroup = code => { location.href = "booth.html?code=" + encodeURIComponent(prettyCode(code)); };
+$("codeGo").onclick = () => {
+  const c = $("codeIn").value;
+  if (normCode(c).length < 6) { $("codeMsg").textContent = "Enter the whole code, like GRACE-HARBOR-482."; return; }
+  openGroup(c);
+};
+$("codeIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("codeGo").click(); } });
+$("codeNew").onclick = () => openGroup(newGroupCode());
+
+// A room left from a previous meeting is cleared when the booth opens it again
+async function clearIfStale() {
+  try {
+    const st = (await get(ref(db, base + "/state"))).val();
+    if (st && st.beat && Date.now() - st.beat > 6 * 3600 * 1000) {
+      await remove(ref(db, base + "/lines"));
+      session = Date.now().toString(36); store.set("session", session);
+      lines = []; renderPreview(); pushState(true);
+    }
+  } catch (err) { console.warn("Couldn’t check for an old meeting", err); }
 }
 
 const fixes = () => $("vocab").value.split("\n").map(s => s.split(/\s*(?:=>|→|=)\s*/)).filter(p => p.length === 2 && p[0] && p[1]);

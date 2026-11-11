@@ -19,7 +19,15 @@
       <button class="btn" id="bigger" aria-label="Larger text">A+</button>
       <button class="btn" id="hcBtn" aria-pressed="false">High contrast</button>
       <button class="btn hidden" id="origBtn" aria-pressed="true">Show English too</button>
+      <button class="btn" id="joinBtn">Join a group</button>
     </div>
+  </div>
+  <div class="join-box hidden" id="joinBox">
+    <label class="field" for="joinIn">Group code
+      <input id="joinIn" placeholder="e.g. GRACE-HARBOR-482" autocomplete="off" autocapitalize="characters">
+    </label>
+    <button class="btn primary" id="joinGo">Join</button>
+    <span class="hint" id="joinMsg">Your group leader can give you the code.</span>
   </div>
   <div class="captions" id="captions" aria-live="polite">
     <div class="example-note" id="exampleNote">Example captions. When the service starts, the sermon will appear here as it is spoken.</div>

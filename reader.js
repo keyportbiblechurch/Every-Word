@@ -1,10 +1,13 @@
 import { CONFIG } from "./config.js";
-import { LANGS, RTL, esc, store, roomName, markRefs, isConfigured } from "./common.js";
+import { LANGS, RTL, esc, store, roomName, groupCodeParam, groupRoomPath, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, query, limitToLast, onValue, onChildAdded, onChildChanged, onChildRemoved } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const $ = id => document.getElementById(id);
-const room = roomName(CONFIG.room);
+const groupCode = prettyCode(groupCodeParam());
+const isGroup = normCode(groupCode).length >= 6;
+const room = isGroup ? await groupRoomPath(groupCode) : roomName(CONFIG.room);
+const isFresh = l => !l.t || Date.now() - l.t < STALE_HOURS * 3600 * 1000;   // hide captions from earlier meetings
 $("church").textContent = CONFIG.churchName || "Every Word";
 document.title = (CONFIG.churchName ? CONFIG.churchName + " · " : "") + "Live Captions";
 
@@ -41,8 +44,9 @@ function fillLangs() {
   applyPrefs();
 }
 function render() {
-  const stick = atBottom(), n = order.length;
-  let html = order.map((id, i) => {
+  const shown = order.filter(id => isFresh(lines.get(id)));
+  const stick = atBottom(), n = shown.length;
+  let html = shown.map((id, i) => {
     const l = lines.get(id), en = l.src || "";
     const t = lang !== "EN" && l.tr && l.tr[lang];
     const main = t || en, orig = t && showOrig ? en : "";
@@ -70,7 +74,7 @@ function setStatus() {
   else if (paused && fresh) { s.className = "chip warn"; s.textContent = "Paused for prayer"; }
   else if (live && fresh) { s.className = "chip live"; s.textContent = title ? "Live · " + title : "Live"; }
   else if (gotReal) { s.className = "chip warn"; s.textContent = "Paused"; }
-  else { s.className = "chip"; s.textContent = "Waiting for service"; }
+  else { s.className = "chip"; s.textContent = isGroup ? "Waiting for the group to start" : "Waiting for service"; }
 }
 
 $("lang").onchange = e => { lang = e.target.value; store.set("lang", lang); applyPrefs(); render(); };
@@ -105,7 +109,8 @@ if (isConfigured(CONFIG)) {
     lines.set(s.key, {
       src: String(v.src || ""),
       tr: v.tr && typeof v.tr === "object" ? v.tr : {},
-      scripture: Array.isArray(v.scripture) ? v.scripture.slice(0, 3) : []
+      scripture: Array.isArray(v.scripture) ? v.scripture.slice(0, 3) : [],
+      t: typeof v.t === "number" ? v.t : 0
     });
     render();
   };
@@ -113,5 +118,20 @@ if (isConfigured(CONFIG)) {
   onChildChanged(q, upsert);
   onChildRemoved(q, s => { lines.delete(s.key); order = order.filter(k => k !== s.key); render(); });
 }
+// ---- join a private group ----
+$("joinBtn").textContent = isGroup ? "Leave group" : "Join a group";
+if (isGroup) $("church").textContent = "Private group";
+$("joinBtn").onclick = () => {
+  if (isGroup) { location.href = "index.html"; return; }
+  $("joinBox").classList.toggle("hidden"); $("joinIn").focus();
+};
+const join = () => {
+  const c = $("joinIn").value;
+  if (normCode(c).length < 6) { $("joinMsg").textContent = "Enter the whole code your group leader gave you, like GRACE-HARBOR-482."; return; }
+  location.href = "index.html?code=" + encodeURIComponent(prettyCode(c));
+};
+$("joinGo").onclick = join;
+$("joinIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); join(); } });
+setInterval(() => { setStatus(); render(); }, 60000);
 setInterval(setStatus, 5000);
 fillLangs(); applyPrefs(); render(); setStatus();

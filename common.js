@@ -46,6 +46,24 @@ export const roomName = fallback => {
   return (p || fallback || "main").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40) || "main";
 };
 
+// ---- Private group rooms ----
+// A group code like GRACE-HARBOR-482 becomes a long, unguessable database address,
+// so a room can't be found without its code.
+const CODE_WORDS = ["ABIDE","ALTAR","ANCHOR","BREAD","CEDAR","CROWN","DAWN","DOVE","EDEN","FAITH","FIELD","FIRST","FLAME","GRACE","HARBOR","HARVEST","HOPE","JORDAN","JOY","LAMP","LIGHT","LILY","MANNA","MERCY","MORNING","OLIVE","PEACE","PEARL","PSALM","REFUGE","RIVER","ROCK","SALT","SEED","SHEPHERD","SHORE","SPRING","STONE","TABLE","TRUTH","VINE","WATER","WELL","WILLOW","WORD","ZION"];
+export const normCode = c => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+export function newGroupCode() {
+  const r = new Uint32Array(3); crypto.getRandomValues(r);
+  return CODE_WORDS[r[0] % CODE_WORDS.length] + "-" + CODE_WORDS[r[1] % CODE_WORDS.length] + "-" + String(100 + (r[2] % 900));
+}
+export const prettyCode = c => String(c || "").toUpperCase().trim().replace(/\s+/g, "-");
+export async function groupRoomPath(code) {
+  const bytes = new TextEncoder().encode("every-word-group|" + normCode(code));
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return "g-" + [...hash.slice(0, 12)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+export const groupCodeParam = () => new URLSearchParams(location.search).get("code") || "";
+export const STALE_HOURS = 12;   // readers stop showing captions older than this
+
 export const isConfigured = cfg => cfg.firebase && cfg.firebase.databaseURL && !/PASTE-HERE/.test(cfg.firebase.databaseURL + cfg.firebase.apiKey);
 
 // ---- Bible reference highlighting ----

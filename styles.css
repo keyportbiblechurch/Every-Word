@@ -108,3 +108,10 @@ input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); }
   .print-card h2 { font-size: 28pt; margin: 0; }
   .print-card p { font-size: 14pt; margin: 0; max-width: 5in; }
 }
+
+/* Private group rooms */
+.join-box { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.join-box .field { flex: 1 1 240px; }
+.join-box .field input { min-height: 44px; border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--bg); font-weight: 400; }
+.join-box .hint { flex-basis: 100%; }
+.code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; letter-spacing: .04em; background: var(--ref-bg); padding: 1px 6px; border-radius: 6px; }

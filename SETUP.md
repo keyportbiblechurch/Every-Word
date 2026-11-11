@@ -82,6 +82,22 @@ Now the booth's **Translate into** checkboxes work. Readers choose their languag
 
 ---
 
+## Private group rooms
+
+Besides the main Sunday room, you can create rooms for small groups, studies or classes. Only people with a room's code can read along, whether they're in the room or following along while traveling. There's no extra setup: the booth login you already have runs every room.
+
+**Each meeting**
+1. Open `booth.html` on a laptop in Chrome and sign in with the booth login.
+2. The first time, click **Create a private group room**. This gives a code like **GRACE-HARBOR-482**. The group can keep using the same code every week: type it in the **Room** box and click **Open**. **Back to main service** returns to the Sunday room.
+3. Members open the reader page, tap **Join a group**, and enter the code, or scan the booth's QR code.
+
+**Good to know**
+- **Anyone with the code can read along,** so share it only with the group. To change it, create a new room.
+- **Captions from an earlier meeting disappear from readers' screens after 12 hours,** and the booth clears the old meeting when it opens the room again.
+- **These rooms aren't meant for confidential sharing.** Speech still goes to Google for recognition. For sensitive conversations, use **Pause for prayer**, or have members use their own phone's built-in captions instead.
+
+---
+
 ## How Bible references are read
 
 Speech recognition often writes references oddly ("Romans 828", "Genesis 11"). Every Word applies these rules, in order:
