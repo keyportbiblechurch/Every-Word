@@ -1,17 +1,17 @@
 import { CONFIG } from "./config.js";
-import { VERSION, LANGS, esc, store, roomName, groupCodeParam, groupRoomPath, newGroupCode, prettyCode, normCode, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
+import { VERSION, LANGS, esc, store, roomName, groupCodeParam, roomPathForCode, newGroupCode, prettyCode, normCode, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const $ = id => document.getElementById(id);
-// Which room: a private group (?code=GRACE-HARBOR-482) or a named public room (?room=main)
-const groupCode = prettyCode(groupCodeParam());
-const isGroup = normCode(groupCode).length >= 6;
-const room = isGroup ? await groupRoomPath(groupCode) : roomName(CONFIG.room);
-const base = `rooms/${room}`;
-const readerUrl = new URL("index.html" + (isGroup ? "?code=" + encodeURIComponent(groupCode) : room !== (CONFIG.room || "main") ? "?room=" + room : ""), location.href).href;
-const roomLabel = isGroup ? "private group " + groupCode : "room " + room;
+// ---------- rooms ----------
+// The main room is Sunday worship. Group rooms are saved on this computer as { name, code }.
+// A group's code is its address: GRACE-HARBOR-482 lives at rooms/c-GRACEHARBOR482.
+const MAIN = { name: "Sunday Worship", code: "" };
+let savedRooms = (store.get("rooms", []) || []).filter(r => r && normCode(r.code).length >= 6);
+let current = MAIN, room = roomName(CONFIG.room), base = `rooms/${room}`, readerUrl = "";
+const pathFor = r => r.code ? roomPathForCode(r.code) : roomName(CONFIG.room);
 
 if (!isConfigured(CONFIG)) {
   $("setupNeeded").classList.remove("hidden");
@@ -47,19 +47,13 @@ setBibleRelay(CONFIG.translateUrl);
 
 async function startConsole() {
   if (started) return; started = true;
-  renderRoomPanel();
   if ($("versionLine")) $("versionLine").textContent = "Every Word version " + VERSION;
-  await clearIfStale();   // must run before the booth announces itself, or the old meeting looks current
-  $("shareUrl").textContent = readerUrl;
-  $("printUrl").textContent = readerUrl;
-  try {
-    new QRCode($("qr"), { text: readerUrl, width: 180, height: 180 });
-    new QRCode($("qrPrint"), { text: readerUrl, width: 300, height: 300 });
-  } catch { $("qr").classList.add("hidden"); }
-
-  $("svcTitle").value = store.get("title-" + room, isGroup ? "Small group" : store.get("title", "Sunday Worship"));
   $("vocab").value = store.get("vocab", $("vocab").value);
-  $("svcTitle").oninput = e => { store.set("title-" + room, e.target.value); pushState(); };
+  $("svcTitle").oninput = e => {
+    if (current.code) { current.name = e.target.value || "Group room"; saveRooms(); renderRooms(); }
+    else store.set("title", e.target.value);
+    pushState();
+  };
 
   $("vocab").oninput = e => store.set("vocab", e.target.value);
 
@@ -80,12 +74,17 @@ async function startConsole() {
   onValue(ref(db, ".info/connected"), s => {
     const ok = !!s.val();
     $("conn").className = "chip" + (ok ? " live" : " warn");
-    $("conn").textContent = ok ? "Connected · " + roomLabel : "Offline: check the internet";
+    $("conn").textContent = ok ? "Connected" : "Offline: check the internet";
     $("conn").title = "Every Word version " + VERSION;
   });
+  // Open the room in the address (?code=…) if there is one, otherwise Sunday worship
+  const linked = prettyCode(groupCodeParam());
+  let first = MAIN;
+  if (normCode(linked).length >= 6) {
+    first = savedRooms.find(r => normCode(r.code) === normCode(linked)) || addRoom("Group room", linked);
+  }
+  await selectRoom(first, true);
   setInterval(() => pushState(true), 20000); // heartbeat for readers
-  pushState(true);
-  renderPreview();
 }
 
 // ---------- writing to Firebase ----------
@@ -111,29 +110,95 @@ function writeErr(err) {
   console.error(err);
 }
 
-// ---------- rooms ----------
-const roomUI = !!($("roomInfo") && $("codeGo") && $("codeIn") && $("codeNew") && $("roomBack"));
-function renderRoomPanel() {
-  if (!roomUI) {
-    const n = $("micNotice");
-    if (n) { n.textContent = "booth.html is out of date, so room codes are unavailable. Upload the latest booth.html to GitHub, wait a minute, then refresh with Ctrl + Shift + R."; n.classList.remove("hidden"); }
-    return;
+// ---------- rooms panel ----------
+const saveRooms = () => store.set("rooms", savedRooms.map(r => ({ name: r.name, code: r.code })));
+function addRoom(name, code) {
+  const r = { name: (name || "").trim() || "Group room", code: prettyCode(code) };
+  savedRooms.push(r); saveRooms(); return r;
+}
+function roomMsg(text) { const m = $("roomMsg"); if (m) m.textContent = text; }
+
+async function selectRoom(r, first) {
+  if (!first && wantListening) {
+    stopMic();
+    micNotice("Captions stopped because you switched rooms. Press Start captions to begin in " + r.name + ".");
   }
-  $("roomInfo").innerHTML = isGroup
-    ? `<b>Private group</b> · code <span class="code">${esc(groupCode)}</span><br><span class="hint">Only people with this code can read along, wherever they are. Share it with your group only.</span>`
-    : `<b>Main service</b> · public link<br><span class="hint">Anyone with the link can read along.</span>`;
-  $("roomBack").classList.toggle("hidden", !isGroup);
+  if (paused) { paused = false; setPauseUI(); }
+  current = r; room = pathFor(r); base = `rooms/${room}`;
+  readerUrl = new URL("index.html" + (r.code ? "?code=" + encodeURIComponent(r.code) : room !== (CONFIG.room || "main") ? "?room=" + room : ""), location.href).href;
+  lines = []; partial = ""; recentRefs.length = 0;
+  if (editing) closeEdit();
+  $("svcTitle").value = r.code ? r.name : store.get("title", "Sunday Worship");
+  renderRooms(); renderShare(); renderPreview();
+  await clearIfStale();   // before announcing the room, or last week's meeting looks current
+  pushState(true);
 }
-const openGroup = code => { location.href = "booth.html?code=" + encodeURIComponent(prettyCode(code)); };
-if (roomUI) {
-$("codeGo").onclick = () => {
-  const c = $("codeIn").value;
-  if (normCode(c).length < 6) { $("codeMsg").textContent = "Enter the whole code, like GRACE-HARBOR-482."; return; }
-  openGroup(c);
-};
-$("codeIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("codeGo").click(); } });
-$("codeNew").onclick = () => openGroup(newGroupCode());
+
+function renderRooms() {
+  const now = $("roomNow"), list = $("roomList");
+  if (!now || !list) return;
+  now.innerHTML = current.code
+    ? `<span class="hint">Captioning now</span><b>${esc(current.name)}</b><span>Code <span class="code">${esc(current.code)}</span>. Only people with this code can read along, wherever they are.</span>`
+    : `<span class="hint">Captioning now</span><b>${esc(MAIN.name)}</b><span>Main service. Anyone with the public link can read along.</span>`;
+  const all = [MAIN, ...savedRooms];
+  list.innerHTML = all.map((r, i) => {
+    const on = r === current;
+    return `<div class="room-item${on ? " on" : ""}">
+      <div class="room-name"><b>${esc(r.name)}</b><span class="hint">${r.code ? esc(r.code) : "Main service"}</span></div>
+      ${on ? '<span class="chip live">Now</span>' : `<button class="btn" data-room-switch="${i}">Switch</button>`}
+      ${r.code && !on ? `<button class="btn" data-room-remove="${i}" aria-label="Remove ${esc(r.name)} from this list">Remove</button>` : ""}
+    </div>`;
+  }).join("");
 }
+
+function renderShare() {
+  $("shareUrl").textContent = readerUrl;
+  $("printUrl").textContent = readerUrl;
+  try {
+    $("qr").innerHTML = ""; $("qrPrint").innerHTML = "";
+    new QRCode($("qr"), { text: readerUrl, width: 180, height: 180 });
+    new QRCode($("qrPrint"), { text: readerUrl, width: 300, height: 300 });
+    $("qr").classList.remove("hidden");
+  } catch { $("qr").classList.add("hidden"); }
+}
+
+// One click handler for the whole panel, so buttons always respond
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-room-switch],[data-room-remove],[data-room-action]");
+  if (!t || !$("roomPanel") || !$("roomPanel").contains(t)) return;
+  const all = [MAIN, ...savedRooms];
+  if (t.dataset.roomSwitch !== undefined) {
+    const r = all[+t.dataset.roomSwitch]; if (!r) return;
+    roomMsg("Switching to " + r.name + "…");
+    await selectRoom(r);
+    roomMsg("Now captioning " + r.name + ".");
+  } else if (t.dataset.roomRemove !== undefined) {
+    const r = all[+t.dataset.roomRemove]; if (!r || !r.code) return;
+    if (t.dataset.confirm !== "1") { t.dataset.confirm = "1"; t.textContent = "Tap again to remove"; setTimeout(() => { t.dataset.confirm = ""; t.textContent = "Remove"; }, 4000); return; }
+    savedRooms = savedRooms.filter(x => x !== r); saveRooms(); renderRooms();
+    roomMsg("Removed " + r.name + " from this list. Its code still works if you add it again.");
+  } else if (t.dataset.roomAction === "create") {
+    const name = $("newRoomName").value.trim();
+    if (!name) { roomMsg("Give the room a name first, like Tuesday Men’s Study."); $("newRoomName").focus(); return; }
+    const r = addRoom(name, newGroupCode());
+    $("newRoomName").value = "";
+    await selectRoom(r);
+    roomMsg("Created " + r.name + ". Share the code " + r.code + " (or the QR code) with your group.");
+  } else if (t.dataset.roomAction === "add") {
+    const code = $("addCode").value;
+    if (normCode(code).length < 6) { roomMsg("Enter the whole code, like GRACE-HARBOR-482."); $("addCode").focus(); return; }
+    const existing = savedRooms.find(x => normCode(x.code) === normCode(code));
+    const r = existing || addRoom("Group room", code);
+    $("addCode").value = "";
+    await selectRoom(r);
+    roomMsg(existing ? "Switched to " + r.name + "." : "Added " + r.code + ". You can rename it in the Title box below.");
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  if (e.target.id === "newRoomName") { e.preventDefault(); document.querySelector('[data-room-action="create"]').click(); }
+  if (e.target.id === "addCode") { e.preventDefault(); document.querySelector('[data-room-action="add"]').click(); }
+});
 
 // A room left from a previous meeting is cleared when the booth opens it again
 async function clearIfStale() {
@@ -142,7 +207,7 @@ async function clearIfStale() {
     if (st && st.beat && Date.now() - st.beat > 6 * 3600 * 1000) {
       await remove(ref(db, base + "/lines"));
       session = Date.now().toString(36); store.set("session", session);
-      lines = []; renderPreview(); pushState(true);
+      lines = []; renderPreview();
     }
   } catch (err) { console.warn("Couldn’t check for an old meeting", err); }
 }
@@ -155,7 +220,7 @@ function addLine(text) {
   text = tidy(text);
   if (!text) return;
   const r = push(ref(db, base + "/lines"));
-  const l = { key: r.key, src: text, t: Date.now(), tr: {}, pending: canTranslate && selLangs.length > 0 };
+  const l = { key: r.key, base, src: text, t: Date.now(), tr: {}, pending: canTranslate && selLangs.length > 0 };
   lines.push(l);
   set(r, { src: text, t: serverTimestamp() }).catch(writeErr);
   renderPreview();
@@ -197,10 +262,10 @@ async function attachVerses(l, force) {
   }
   if (!cards.length) return;
   l.scripture = cards;
-  set(ref(db, `${base}/lines/${l.key}/scripture`), cards).catch(writeErr);
+  set(ref(db, `${l.base || base}/lines/${l.key}/scripture`), cards).catch(writeErr);
   if (fixedSrc !== l.src) {
     l.src = fixedSrc;
-    update(ref(db, `${base}/lines/${l.key}`), { src: fixedSrc }).catch(writeErr);
+    update(ref(db, `${l.base || base}/lines/${l.key}`), { src: fixedSrc }).catch(writeErr);
   }
   renderPreview();
 }
@@ -226,7 +291,7 @@ async function pumpTranslate() {
       const tr = {};
       targets.forEach(c => { const t = data.translations && data.translations[c] && data.translations[c][i]; if (typeof t === "string") tr[c] = t; });
       l.tr = { ...l.tr, ...tr }; l.pending = false;
-      if (Object.keys(tr).length) update(ref(db, `${base}/lines/${l.key}/tr`), tr).catch(writeErr);
+      if (Object.keys(tr).length) update(ref(db, `${l.base || base}/lines/${l.key}/tr`), tr).catch(writeErr);
       else l.failed = true;
     });
     const failed = Object.keys(data.failed || {});
@@ -332,7 +397,7 @@ $("refList").addEventListener("click", async e => {
     const card = await buildCard(r);
     if (!card) throw new Error("not found");
     const nr = push(ref(db, base + "/lines"));
-    const l = { key: nr.key, src: card.label, t: Date.now(), tr: {}, scripture: [card] };
+    const l = { key: nr.key, base, src: card.label, t: Date.now(), tr: {}, scripture: [card] };
     lines.push(l); recentRefs.push(card.label);
     set(nr, { src: card.label, t: serverTimestamp(), scripture: [card] }).catch(writeErr);
     renderPreview();
@@ -357,7 +422,7 @@ function saveEdit() {
   if (!l || !text || text === l.src) return;
   l.src = text; l.tr = {}; l.failed = false;
   l.pending = canTranslate && selLangs.length > 0;
-  update(ref(db, `${base}/lines/${l.key}`), { src: text, tr: null }).catch(writeErr);
+  update(ref(db, `${l.base || base}/lines/${l.key}`), { src: text, tr: null }).catch(writeErr);
   renderPreview(); pumpTranslate(); attachVerses(l, true);
 }
 $("preview").addEventListener("click", e => {

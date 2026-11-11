@@ -71,19 +71,29 @@
   </div>
 
   <div class="panel">
-    <h2>Room</h2>
-    <div id="roomInfo"></div>
-    <div class="row">
-      <input id="codeIn" placeholder="Group code, e.g. GRACE-HARBOR-482" aria-label="Group code" autocomplete="off">
-      <button class="btn" id="codeGo">Open</button>
-    </div>
-    <span class="hint" id="codeMsg"></span>
-    <div class="ctrl">
-      <button class="btn" id="codeNew">Create a private group room</button>
-      <a class="btn" id="roomBack" href="booth.html" style="text-decoration:none;display:inline-flex;align-items:center">Back to main service</a>
+    <div class="room-panel" id="roomPanel">
+      <h2>Rooms</h2>
+      <div class="room-now" id="roomNow"></div>
+      <div class="room-list" id="roomList"></div>
+      <div class="field">
+        <label for="newRoomName">New room</label>
+        <span class="hint">For a small group, class or study. Only people with its code can read along.</span>
+        <div class="row">
+          <input id="newRoomName" placeholder="e.g. Tuesday Men’s Study" autocomplete="off">
+          <button class="btn" type="button" data-room-action="create">Create</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="addCode">Have a code already?</label>
+        <div class="row">
+          <input id="addCode" placeholder="e.g. GRACE-HARBOR-482" autocomplete="off" autocapitalize="characters">
+          <button class="btn" type="button" data-room-action="add">Add</button>
+        </div>
+      </div>
+      <span class="hint" id="roomMsg" role="status"></span>
     </div>
     <h2>Service</h2>
-    <label class="field" for="svcTitle">Title shown to readers <input id="svcTitle" value="Sunday Worship"></label>
+    <label class="field" for="svcTitle">Title shown to readers (for a group room, this is its name) <input id="svcTitle" value="Sunday Worship"></label>
     <h2>Today’s Scripture</h2>
     <label class="field" for="sermonRefs">References in this sermon
       <span class="hint">One per line, e.g. <i>Romans 8:28–30</i>. Cards appear even if a reference is mumbled, and <b>Show</b> sends any one to readers right away.</span>

@@ -82,19 +82,25 @@ Now the booth's **Translate into** checkboxes work. Readers choose their languag
 
 ---
 
-## Private group rooms
+## Group rooms
 
-Besides the main Sunday room, you can create rooms for small groups, studies or classes. Only people with a room's code can read along, whether they're in the room or following along while traveling. There's no extra setup: the booth login you already have runs every room.
+Besides Sunday worship, you can caption small groups, studies or classes in their own rooms. Only people with a room's code can read along, whether they're in the room or traveling. There's no extra setup: your booth login runs every room.
 
-**Each meeting**
-1. Open `booth.html` on a laptop in Chrome and sign in with the booth login.
-2. The first time, click **Create a private group room**. This gives a code like **GRACE-HARBOR-482**. The group can keep using the same code every week: type it in the **Room** box and click **Open**. **Back to main service** returns to the Sunday room.
-3. Members open the reader page, tap **Join a group**, and enter the code, or scan the booth's QR code.
+**In the booth's Rooms panel**
+- **Create a room:** type a name (e.g. *Tuesday Men's Study*) and click **Create**. It gets a code like **GRACE-HARBOR-482**, and the QR code switches to that room.
+- **Switch rooms:** click **Switch** next to any room in the list. The booth changes rooms instantly. If captions were running, they stop so nothing goes to the wrong room; press **Start captions** again.
+- **Use a code from another computer:** type it under **Have a code already?** and click **Add**.
+- **Rename a room:** while it's selected, edit the **Title** box.
+- **Remove a room from the list:** click **Remove** twice. The code still works if you add it again later.
+
+The list of rooms is saved on the booth computer. On a different computer, add the codes with **Have a code already?**
+
+**For members:** open the reader page, tap **Join a group**, and enter the code, or scan the room's QR code.
 
 **Good to know**
 - **Anyone with the code can read along,** so share it only with the group. To change it, create a new room.
-- **Captions from an earlier meeting disappear from readers' screens after 12 hours,** and the booth clears the old meeting when it opens the room again.
-- **These rooms aren't meant for confidential sharing.** Speech still goes to Google for recognition. For sensitive conversations, use **Pause for prayer**, or have members use their own phone's built-in captions instead.
+- **Captions from an earlier meeting disappear from readers' screens after 12 hours,** and the booth clears the old meeting when the room is opened again.
+- **These rooms aren't meant for confidential sharing.** Speech still goes to Google for recognition. For personal sharing, use **Pause for prayer**, or have members use their own phone's built-in captions instead.
 
 ---
 

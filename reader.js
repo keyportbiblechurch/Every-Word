@@ -1,12 +1,12 @@
 import { CONFIG } from "./config.js";
-import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, groupRoomPath, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js";
+import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, roomPathForCode, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, query, limitToLast, onValue, onChildAdded, onChildChanged, onChildRemoved } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const $ = id => document.getElementById(id);
 const groupCode = prettyCode(groupCodeParam());
 const isGroup = normCode(groupCode).length >= 6;
-const room = isGroup ? await groupRoomPath(groupCode) : roomName(CONFIG.room);
+const room = isGroup ? roomPathForCode(groupCode) : roomName(CONFIG.room);
 const isFresh = l => !l.t || Date.now() - l.t < STALE_HOURS * 3600 * 1000;   // hide captions from earlier meetings
 $("church").textContent = CONFIG.churchName || "Every Word";
 document.title = (CONFIG.churchName ? CONFIG.churchName + " · " : "") + "Live Captions";
@@ -123,13 +123,14 @@ if ($("joinBtn") && $("joinBox") && $("joinIn") && $("joinGo")) {
 $("joinBtn").textContent = isGroup ? "Leave group" : "Join a group";
 if (isGroup) $("church").textContent = "Private group";
 $("joinBtn").onclick = () => {
-  if (isGroup) { location.href = "index.html"; return; }
+  if (isGroup) { location.assign(new URL("index.html", location.href).href); return; }
   $("joinBox").classList.toggle("hidden"); $("joinIn").focus();
 };
 const join = () => {
   const c = $("joinIn").value;
   if (normCode(c).length < 6) { $("joinMsg").textContent = "Enter the whole code your group leader gave you, like GRACE-HARBOR-482."; return; }
-  location.href = "index.html?code=" + encodeURIComponent(prettyCode(c));
+  $("joinMsg").textContent = "Joining…";
+  location.assign(new URL("index.html?code=" + encodeURIComponent(prettyCode(c)), location.href).href);
 };
 $("joinGo").onclick = join;
 $("joinIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); join(); } });

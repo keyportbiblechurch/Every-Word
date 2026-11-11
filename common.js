@@ -1,5 +1,5 @@
 // Shared helpers for the reader and booth pages.
-export const VERSION = "2026-11-10c";
+export const VERSION = "2026-11-10d";
 
 // DeepL target languages offered in the booth.
 export const LANGS = {
@@ -47,21 +47,18 @@ export const roomName = fallback => {
   return (p || fallback || "main").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40) || "main";
 };
 
-// ---- Private group rooms ----
-// A group code like GRACE-HARBOR-482 becomes a long, unguessable database address,
-// so a room can't be found without its code.
+// ---- Group rooms ----
+// A group's code is its address in the database: GRACE-HARBOR-482 → rooms/c-GRACEHARBOR482.
+// With about 2 million possible codes and no way to list rooms, a room can't be found without its code.
 const CODE_WORDS = ["ABIDE","ALTAR","ANCHOR","BREAD","CEDAR","CROWN","DAWN","DOVE","EDEN","FAITH","FIELD","FIRST","FLAME","GRACE","HARBOR","HARVEST","HOPE","JORDAN","JOY","LAMP","LIGHT","LILY","MANNA","MERCY","MORNING","OLIVE","PEACE","PEARL","PSALM","REFUGE","RIVER","ROCK","SALT","SEED","SHEPHERD","SHORE","SPRING","STONE","TABLE","TRUTH","VINE","WATER","WELL","WILLOW","WORD","ZION"];
 export const normCode = c => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+export const prettyCode = c => String(c || "").toUpperCase().trim().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
 export function newGroupCode() {
-  const r = new Uint32Array(3); crypto.getRandomValues(r);
+  const r = new Uint32Array(3);
+  (window.crypto || globalThis.crypto).getRandomValues(r);
   return CODE_WORDS[r[0] % CODE_WORDS.length] + "-" + CODE_WORDS[r[1] % CODE_WORDS.length] + "-" + String(100 + (r[2] % 900));
 }
-export const prettyCode = c => String(c || "").toUpperCase().trim().replace(/\s+/g, "-");
-export async function groupRoomPath(code) {
-  const bytes = new TextEncoder().encode("every-word-group|" + normCode(code));
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return "g-" + [...hash.slice(0, 12)].map(b => b.toString(16).padStart(2, "0")).join("");
-}
+export const roomPathForCode = code => "c-" + normCode(code).slice(0, 40);
 export const groupCodeParam = () => new URLSearchParams(location.search).get("code") || "";
 export const STALE_HOURS = 12;   // readers stop showing captions older than this
 
