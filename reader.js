@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { LANGS, RTL, esc, store, roomName, groupCodeParam, groupRoomPath, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js";
+import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, groupRoomPath, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, query, limitToLast, onValue, onChildAdded, onChildChanged, onChildRemoved } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
@@ -119,6 +119,7 @@ if (isConfigured(CONFIG)) {
   onChildRemoved(q, s => { lines.delete(s.key); order = order.filter(k => k !== s.key); render(); });
 }
 // ---- join a private group ----
+if ($("joinBtn") && $("joinBox") && $("joinIn") && $("joinGo")) {
 $("joinBtn").textContent = isGroup ? "Leave group" : "Join a group";
 if (isGroup) $("church").textContent = "Private group";
 $("joinBtn").onclick = () => {
@@ -132,6 +133,7 @@ const join = () => {
 };
 $("joinGo").onclick = join;
 $("joinIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); join(); } });
+} else console.warn("index.html is out of date: the Join a group button is missing. Upload the latest index.html.");
 setInterval(() => { setStatus(); render(); }, 60000);
 setInterval(setStatus, 5000);
 fillLangs(); applyPrefs(); render(); setStatus();

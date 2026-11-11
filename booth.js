@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { LANGS, esc, store, roomName, groupCodeParam, groupRoomPath, newGroupCode, prettyCode, normCode, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
+import { VERSION, LANGS, esc, store, roomName, groupCodeParam, groupRoomPath, newGroupCode, prettyCode, normCode, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -48,6 +48,7 @@ setBibleRelay(CONFIG.translateUrl);
 async function startConsole() {
   if (started) return; started = true;
   renderRoomPanel();
+  if ($("versionLine")) $("versionLine").textContent = "Every Word version " + VERSION;
   await clearIfStale();   // must run before the booth announces itself, or the old meeting looks current
   $("shareUrl").textContent = readerUrl;
   $("printUrl").textContent = readerUrl;
@@ -80,6 +81,7 @@ async function startConsole() {
     const ok = !!s.val();
     $("conn").className = "chip" + (ok ? " live" : " warn");
     $("conn").textContent = ok ? "Connected · " + roomLabel : "Offline: check the internet";
+    $("conn").title = "Every Word version " + VERSION;
   });
   setInterval(() => pushState(true), 20000); // heartbeat for readers
   pushState(true);
@@ -110,13 +112,20 @@ function writeErr(err) {
 }
 
 // ---------- rooms ----------
+const roomUI = !!($("roomInfo") && $("codeGo") && $("codeIn") && $("codeNew") && $("roomBack"));
 function renderRoomPanel() {
+  if (!roomUI) {
+    const n = $("micNotice");
+    if (n) { n.textContent = "booth.html is out of date, so room codes are unavailable. Upload the latest booth.html to GitHub, wait a minute, then refresh with Ctrl + Shift + R."; n.classList.remove("hidden"); }
+    return;
+  }
   $("roomInfo").innerHTML = isGroup
     ? `<b>Private group</b> · code <span class="code">${esc(groupCode)}</span><br><span class="hint">Only people with this code can read along, wherever they are. Share it with your group only.</span>`
     : `<b>Main service</b> · public link<br><span class="hint">Anyone with the link can read along.</span>`;
   $("roomBack").classList.toggle("hidden", !isGroup);
 }
 const openGroup = code => { location.href = "booth.html?code=" + encodeURIComponent(prettyCode(code)); };
+if (roomUI) {
 $("codeGo").onclick = () => {
   const c = $("codeIn").value;
   if (normCode(c).length < 6) { $("codeMsg").textContent = "Enter the whole code, like GRACE-HARBOR-482."; return; }
@@ -124,6 +133,7 @@ $("codeGo").onclick = () => {
 };
 $("codeIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("codeGo").click(); } });
 $("codeNew").onclick = () => openGroup(newGroupCode());
+}
 
 // A room left from a previous meeting is cleared when the booth opens it again
 async function clearIfStale() {
