@@ -127,3 +127,7 @@ input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); }
 .room-item .room-name b { overflow-wrap: anywhere; }
 .room-item .btn { min-height: 38px; padding: 4px 12px; font-size: 15px; }
 .room-panel .field { display: flex; flex-direction: column; gap: 6px; font-weight: 700; font-size: 15px; }
+
+/* Small link to the booth at the bottom of the reader page */
+.booth-link { max-width: 34em; margin: 48px auto 0; font-size: 14px; text-align: center; }
+.booth-link a { color: var(--muted); }

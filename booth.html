@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=2026-11-10f">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
@@ -126,6 +126,18 @@ propitiation = propitiation</textarea>
   <p class="print-url" id="printUrl"></p>
 </div>
 
-<script type="module" src="booth.js"></script>
+<div id="loadError" class="notice" hidden style="margin:24px;font-size:17px"></div>
+<script>
+// Shown only if Every Word's code fails to start, instead of a blank screen
+(function () {
+  function show(msg) { var b = document.getElementById("loadError"); if (b && !window.__ewStarted) { b.textContent = msg; b.hidden = false; } }
+  var help = " This usually means one of Every Word's files on GitHub is out of date or still updating. Check that all files were uploaded, wait a few minutes, then refresh with Ctrl + Shift + R.";
+  window.addEventListener("error", function (e) {
+    if (e instanceof ErrorEvent || (e.target && e.target.tagName === "SCRIPT")) show("Every Word couldn't start." + help + (e.message ? " (Details: " + e.message + ")" : ""));
+  }, true);
+  setTimeout(function () { show("Every Word is taking too long to start." + help); }, 10000);
+})();
+</script>
+<script type="module" src="booth.js?v=2026-11-10f"></script>
 </body>
 </html>

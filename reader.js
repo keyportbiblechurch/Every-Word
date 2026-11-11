@@ -1,7 +1,8 @@
-import { CONFIG } from "./config.js";
-import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, roomPathForCode, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js";
+import { CONFIG } from "./config.js?v=2026-11-10f";
+import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, roomPathForCode, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js?v=2026-11-10f";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, query, limitToLast, onValue, onChildAdded, onChildChanged, onChildRemoved } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+window.__ewStarted = true;   // tells the page the code loaded (see the fallback message in the .html)
 
 const $ = id => document.getElementById(id);
 const groupCode = prettyCode(groupCodeParam());

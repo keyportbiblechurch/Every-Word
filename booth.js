@@ -1,8 +1,9 @@
-import { CONFIG } from "./config.js";
-import { VERSION, LANGS, esc, store, roomName, groupCodeParam, roomPathForCode, newGroupCode, prettyCode, normCode, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js";
+import { CONFIG } from "./config.js?v=2026-11-10f";
+import { VERSION, LANGS, esc, store, roomName, groupCodeParam, roomPathForCode, newGroupCode, prettyCode, normCode, markRefs, tidyRefs, resolveRefs, isConfigured, findRefs, fetchVerses, setBibleRelay, bookMentioned, fetchCatalog, biblesFor } from "./common.js?v=2026-11-10f";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, serverTimestamp, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+window.__ewStarted = true;   // tells the page the code loaded (see the fallback message in the .html)
 
 const $ = id => document.getElementById(id);
 // ---------- rooms ----------
