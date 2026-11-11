@@ -123,20 +123,23 @@ const recentRefs = [];
 const isRecent = label => recentRefs.slice(-6).includes(label);
 async function attachVerses(l, force) {
   let refs = findRefs(l.src).filter(r => force || !isRecent(r.label));
-  // Mumbled or partial reference ("Romans 8...") → match today's planned Scripture by book + chapter or verse number
+  // Rule 2: a book + chapter from today's list ("Romans 8 …") shows that planned passage
   if (!refs.length && !findRefs(l.src).length) {
     const nums = (l.src.match(/\d+/g) || []).map(Number);
-    refs = planned.filter(p => (force || !isRecent(p.label)) && bookMentioned(l.src, p.id) && (nums.includes(p.ch) || nums.includes(p.v1))).slice(0, 1);
+    refs = planned.filter(p => (force || !isRecent(p.label)) && bookMentioned(l.src, p.id) && nums.includes(p.ch)).slice(0, 1);
   }
   if (!refs.length) return;
   const cards = [];
+  let fixedSrc = l.src;
   for (const r of refs.slice(0, 3)) {
-    for (const cand of [r, ...(r.alts || [])]) {          // e.g. "Psalm 231" tries 23:1, then 2:31
+    for (const cand of [r, ...(r.alts || [])]) {          // Rule 4: "Psalm 231" tries 23:1, then 2:31 — the one that exists wins
       try {
         const card = await buildCard(cand);
         if (!card) continue;
         recentRefs.push(cand.label);
         cards.push(card);
+        // Rule 5: caption agrees with the card ("Psalm 231" → "Psalm 23:1")
+        if (r.raw && !/:/.test(r.raw) && fixedSrc.includes(r.raw)) fixedSrc = fixedSrc.replace(r.raw, cand.label);
         $("verseNotice").classList.add("hidden");
         break;
       } catch (err) {
@@ -150,6 +153,10 @@ async function attachVerses(l, force) {
   if (!cards.length) return;
   l.scripture = cards;
   set(ref(db, `${base}/lines/${l.key}/scripture`), cards).catch(writeErr);
+  if (fixedSrc !== l.src) {
+    l.src = fixedSrc;
+    update(ref(db, `${base}/lines/${l.key}`), { src: fixedSrc }).catch(writeErr);
+  }
   renderPreview();
 }
 
@@ -430,7 +437,7 @@ let clearArmed = false;
 $("clearBtn").onclick = () => {
   if (!clearArmed) { clearArmed = true; $("clearBtn").textContent = "Click again to clear"; setTimeout(() => { clearArmed = false; $("clearBtn").textContent = "Start a new service"; }, 4000); return; }
   clearArmed = false; $("clearBtn").textContent = "Start a new service";
-  lines = []; partial = ""; session = Date.now().toString(36); store.set("session", session);
+  lines = []; partial = ""; recentRefs.length = 0; session = Date.now().toString(36); store.set("session", session);
   remove(ref(db, base + "/lines")).catch(writeErr);
   renderPreview(); pushState(true);
 };

@@ -82,6 +82,21 @@ Now the booth's **Translate into** checkboxes work. Readers choose their languag
 
 ---
 
+## How Bible references are read
+
+Speech recognition often writes references oddly ("Romans 828", "Genesis 11"). Every Word applies these rules, in order:
+
+1. **A separator always wins.** "11:1", "11 1", "11 verse 1" and "11.1" all mean chapter 11, verse 1.
+2. **Today's Scripture breaks ties.** If a run-together number can be read as a passage on your list, that reading is used: with Genesis 1:1 listed, "Genesis 11" becomes Genesis 1:1. If your list includes something from Genesis *chapter 11*, it stays chapter 11. Naming a book and chapter from your list ("Romans 8 tells us…") shows that planned passage's card.
+3. **Otherwise, a real chapter number is a chapter.** "Genesis 11" means chapter 11: no card, caption unchanged.
+4. **Otherwise, a number too big to be a chapter is split** into the reading that actually exists: "Romans 828" → 8:28, "Psalm 231" → 23:1 (Psalm 2 has no verse 31).
+5. **The caption and the card always agree.**
+6. **Anything else:** click the line in the booth and fix it.
+
+**Tip:** listing your passages under Today's Scripture is the single best way to get every reference right.
+
+---
+
 ## Limits and troubleshooting
 
 | What you see | What to do |

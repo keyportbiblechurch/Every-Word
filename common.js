@@ -74,12 +74,16 @@ const bookPattern = id => BOOKS.filter((b, i) => IDS[i] === id).map(b => b.repla
 //  2. unambiguous ones: "Romans 828" → "Romans 8:28", "John 316" → "John 3:16"
 export function resolveRefs(text, planned = []) {
   for (const p of planned) {
+    // Rule 2: a planned passage in chapter "11" means "Genesis 11" is chapter 11, not 1:1
+    if (planned.some(q => q.id === p.id && String(q.ch) === String(p.ch) + String(p.v1))) continue;
     const re = new RegExp("\\b(?:" + bookPattern(p.id) + ")\\s+(?:chapter\\s+)?" + p.ch + "\\s*(?:,?\\s*verses?\\s+)?" + p.v1 +
-      "(?:\\s*(?:-|–|through|to)\\s*(\\d{1,3}))?\\b(?![:\\d])", "gi");
+      // must not be followed by another verse number ("Genesis 11 1", "Genesis 11 verse 1", "Genesis 11:1" are chapter 11)
+      "(?:\\s*(?:-|–|through|to)\\s*(\\d{1,3}))?\\b(?![:.]?\\d|\\s*(?:[:.]|,?\\s*verses?\\s+)?\\s*\\d)", "gi");
     text = text.replace(re, (m, v2) => p.label.replace(/[–-]\d+$/, "").replace(/:\d+$/, ":" + p.v1) + (v2 ? "–" + v2 : ""));
   }
   for (const r of findRefs(text)) {
-    if (r.runTogether && !r.alts.length && r.raw && !/:/.test(r.raw)) text = text.replace(r.raw, r.label);
+    // "Romans 828" / "Genesis 11 1" / "Genesis 11 verse 1" → written form; ambiguous ones like "Psalm 231" are left as heard
+    if (r.raw && !/:/.test(r.raw) && !(r.runTogether && r.alts.length)) text = text.replace(r.raw, r.label);
   }
   return text;
 }
