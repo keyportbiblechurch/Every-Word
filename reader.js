@@ -1,5 +1,5 @@
-import { CONFIG } from "./config.js?v=2026-11-10f";
-import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, roomPathForCode, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js?v=2026-11-10f";
+import { CONFIG } from "./config.js?v=2026-11-12a";
+import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, roomPathForCode, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js?v=2026-11-12a";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, query, limitToLast, onValue, onChildAdded, onChildChanged, onChildRemoved } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 window.__ewStarted = true;   // tells the page the code loaded (see the fallback message in the .html)
@@ -13,7 +13,11 @@ $("church").textContent = CONFIG.churchName || "Every Word";
 document.title = (CONFIG.churchName ? CONFIG.churchName + " · " : "") + "Live Captions";
 
 let size = store.get("size", 30), lang = store.get("lang", "EN");
-let hc = store.get("hc", false), showOrig = store.get("orig", true);
+let showOrig = store.get("orig", true);
+// Display options (remembered on this phone)
+let theme = store.get("theme", store.get("hc", false) ? "yellow" : "auto");
+let font = store.get("font", "standard"), spacing = store.get("spacing", "normal");
+let rate = Number(store.get("rate", 1)) || 1, keepAwake = store.get("wake", true), focus = store.get("focus", false);
 let lines = new Map(), order = [], partial = "", langs = ["ES"], title = "", live = false, paused = false;
 let lastBeat = 0, gotReal = false, connected = false;
 
@@ -29,11 +33,25 @@ const box = $("captions"), cap = $("capInner");
 const atBottom = () => box.scrollHeight - box.scrollTop - box.clientHeight < 80;
 
 function applyPrefs() {
+  const b = document.body.classList;
   document.documentElement.style.setProperty("--cap-size", size + "px");
-  document.body.classList.toggle("hc", hc);
-  $("hcBtn").setAttribute("aria-pressed", hc);
+  b.toggle("hc", theme === "yellow");
+  b.toggle("theme-white", theme === "white");
+  b.toggle("theme-cream", theme === "cream");
+  b.toggle("font-lexend", font === "lexend");
+  b.toggle("spacing-roomy", spacing === "roomy");
+  b.toggle("spacing-extra", spacing === "extra");
+  b.toggle("focus", focus);
+  $("focusBtn").setAttribute("aria-pressed", focus);
+  $("listenBtn").setAttribute("aria-pressed", listening);
+  $("listenBtn").textContent = listening ? "Stop listening" : "Listen";
   $("origBtn").setAttribute("aria-pressed", showOrig);
   $("origBtn").classList.toggle("hidden", lang === "EN");
+  const box = $("displayBox");
+  [["theme", theme], ["font", font], ["spacing", spacing], ["rate", String(rate)]].forEach(([n, v]) => {
+    const r = box.querySelector(`input[name="${n}"][value="${v}"]`); if (r) r.checked = true;
+  });
+  $("wakeChk").checked = keepAwake;
 }
 function fillLangs() {
   const sel = $("lang"), want = ["EN", ...langs.filter(c => LANGS[c])];
@@ -45,7 +63,9 @@ function fillLangs() {
   applyPrefs();
 }
 function render() {
-  const shown = order.filter(id => isFresh(lines.get(id)));
+  let shown = order.filter(id => isFresh(lines.get(id)));
+  deliver(shown);                                   // speak / announce new lines
+  if (focus && shown.length) shown = shown.slice(-1); // Focus mode: just the current line
   const stick = atBottom(), n = shown.length;
   let html = shown.map((id, i) => {
     const l = lines.get(id), en = l.src || "";
@@ -76,15 +96,119 @@ function setStatus() {
   else if (live && fresh) { s.className = "chip live"; s.textContent = title ? "Live · " + title : "Live"; }
   else if (gotReal) { s.className = "chip warn"; s.textContent = "Paused"; }
   else { s.className = "chip"; s.textContent = isGroup ? "Waiting for the group to start" : "Waiting for service"; }
+  updateWake();
 }
 
-$("lang").onchange = e => { lang = e.target.value; store.set("lang", lang); applyPrefs(); render(); };
+$("lang").onchange = e => {
+  lang = e.target.value; store.set("lang", lang);
+  if (listening) { stopListening(); startListening(); }
+  applyPrefs(); render();
+};
 $("smaller").onclick = () => { size = Math.max(18, size - 4); store.set("size", size); applyPrefs(); render(); };
 $("bigger").onclick = () => { size = Math.min(64, size + 4); store.set("size", size); applyPrefs(); render(); };
-$("hcBtn").onclick = () => { hc = !hc; store.set("hc", hc); applyPrefs(); };
+$("focusBtn").onclick = () => { focus = !focus; store.set("focus", focus); applyPrefs(); render(); };
+$("displayBtn").onclick = () => {
+  const open = $("displayBox").classList.toggle("hidden") === false;
+  $("displayBtn").setAttribute("aria-expanded", open);
+};
+$("displayDone").onclick = () => { $("displayBox").classList.add("hidden"); $("displayBtn").setAttribute("aria-expanded", false); $("displayBtn").focus(); };
+$("displayBox").addEventListener("change", e => {
+  const t = e.target;
+  if (t.name === "theme") { theme = t.value; store.set("theme", theme); }
+  if (t.name === "font") { font = t.value; store.set("font", font); }
+  if (t.name === "spacing") { spacing = t.value; store.set("spacing", spacing); }
+  if (t.name === "rate") { rate = Number(t.value) || 1; store.set("rate", rate); }
+  if (t.id === "wakeChk") { keepAwake = t.checked; store.set("wake", keepAwake); updateWake(); }
+  applyPrefs(); render();
+});
+$("listenBtn").onclick = () => listening ? stopListening() : startListening();
 $("origBtn").onclick = () => { showOrig = !showOrig; store.set("orig", showOrig); applyPrefs(); render(); };
 $("jump").onclick = () => { box.scrollTop = box.scrollHeight; };
 box.addEventListener("scroll", () => $("jump").classList.toggle("hidden", atBottom()));
+
+// ---------- new lines: read aloud and screen-reader announcements ----------
+const SPEECH = { EN: "en", ES: "es", RU: "ru", UK: "uk", KO: "ko", ZH: "zh", JA: "ja", "PT-BR": "pt", FR: "fr", DE: "de", PL: "pl", AR: "ar" };
+const WAIT_FOR_TRANSLATION = 6000;  // ms to wait for a line's translation before falling back to English
+let listening = false, delivered = new Set(), seenAt = new Map(), queue = [], speaking = false;
+const voices = () => ("speechSynthesis" in window ? speechSynthesis.getVoices() : []);
+function voiceFor(code) {
+  const p = SPEECH[code] || "en", vs = voices().filter(v => String(v.lang).toLowerCase().replace("_", "-").startsWith(p));
+  return vs.find(v => v.localService) || vs[0] || null;
+}
+function listenMsg(text) { const m = $("listenMsg"); m.textContent = text || ""; m.classList.toggle("hidden", !text); }
+
+// Called on every render with the visible lines, oldest first
+function deliver(shown) {
+  for (const id of shown) {
+    if (delivered.has(id) || String(id).startsWith("ex")) continue;
+    const l = lines.get(id);
+    if (!seenAt.has(id)) seenAt.set(id, Date.now());
+    let text = l.src, code = "EN";
+    if (lang !== "EN") {
+      if (l.tr && l.tr[lang]) { text = l.tr[lang]; code = lang; }
+      else if (Date.now() - seenAt.get(id) < WAIT_FOR_TRANSLATION) { setTimeout(render, 1500); break; }  // keep order: wait
+    }
+    delivered.add(id);
+    const verses = (l.scripture || []).map(s => {
+      const t = lang !== "EN" && s.tr && s.tr[lang];
+      return t ? { text: t.label + ". " + t.text, code: lang } : { text: s.label + ". " + s.text, code: "EN" };
+    });
+    $("srLive").textContent = [text, ...verses.map(v => v.text)].join(" ");
+    if (listening) {
+      queue.push({ text, code }, ...verses);
+      if (queue.length > 4) queue = queue.slice(-3);   // stay close to live if speech falls behind
+      speakNext();
+    }
+  }
+}
+function speakNext() {
+  if (speaking || !queue.length || !listening) return;
+  const item = queue.shift();
+  const u = new SpeechSynthesisUtterance(item.text);
+  const v = voiceFor(item.code);
+  if (v) u.voice = v;
+  u.lang = v ? v.lang : (SPEECH[item.code] || "en");
+  u.rate = rate;
+  speaking = true;
+  u.onend = u.onerror = () => { speaking = false; speakNext(); };
+  speechSynthesis.speak(u);
+}
+function startListening() {
+  if (!("speechSynthesis" in window)) { listenMsg("This browser can’t read aloud. Try Chrome or Safari."); return; }
+  listening = true;
+  // Start from now: don't read the backlog
+  order.forEach(id => delivered.add(id));
+  speechSynthesis.cancel();
+  const hello = new SpeechSynthesisUtterance(" ");   // a tap-started utterance unlocks speech on phones
+  hello.volume = 0; speechSynthesis.speak(hello);
+  const check = () => {
+    if (!listening) return;
+    if (lang !== "EN" && !voiceFor(lang)) {
+      listenMsg("Your phone doesn’t have a " + (LANGS[lang] || lang) + " voice installed, so it may read in a different voice. You can add voices in your phone’s accessibility or text-to-speech settings.");
+    } else listenMsg("Reading new lines aloud. Use earbuds so you don’t disturb others.");
+  };
+  if (voices().length) check(); else { speechSynthesis.onvoiceschanged = check; setTimeout(check, 1500); }
+  applyPrefs(); updateWake();
+}
+function stopListening() {
+  listening = false; queue = []; speaking = false;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  listenMsg(""); applyPrefs();
+}
+
+// ---------- keep the screen on while captions are live ----------
+let wakeLock = null;
+async function updateWake() {
+  const want = keepAwake && document.visibilityState === "visible" && (live || listening);
+  try {
+    if (want && !wakeLock && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } else if (!want && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch { wakeLock = null; }   // not supported or not allowed: the phone just sleeps as usual
+}
+document.addEventListener("visibilitychange", updateWake);
+document.addEventListener("click", updateWake);   // some phones only allow it after a tap
 
 function clearExamples() {
   if (gotReal) return;

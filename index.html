@@ -6,8 +6,8 @@
 <title>Every Word Live Captions</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-11-10f">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=2026-11-12a">
 </head>
 <body>
 <div class="viewer">
@@ -17,7 +17,9 @@
       <select id="lang" class="btn" aria-label="Caption language"><option value="EN">English</option></select>
       <button class="btn" id="smaller" aria-label="Smaller text">A−</button>
       <button class="btn" id="bigger" aria-label="Larger text">A+</button>
-      <button class="btn" id="hcBtn" aria-pressed="false">High contrast</button>
+      <button class="btn" id="listenBtn" aria-pressed="false">Listen</button>
+      <button class="btn" id="focusBtn" aria-pressed="false">Focus</button>
+      <button class="btn" id="displayBtn" aria-expanded="false" aria-controls="displayBox">Display</button>
       <button class="btn hidden" id="origBtn" aria-pressed="true">Show English too</button>
       <button class="btn" id="joinBtn">Join a group</button>
     </div>
@@ -29,7 +31,37 @@
     <button class="btn primary" id="joinGo">Join</button>
     <span class="hint" id="joinMsg">Your group leader can give you the code.</span>
   </div>
-  <div class="captions" id="captions" aria-live="polite">
+  <div class="display-box hidden" id="displayBox" role="region" aria-label="Display options">
+    <fieldset>
+      <legend>Colors</legend>
+      <label><input type="radio" name="theme" value="auto"> Match my phone</label>
+      <label><input type="radio" name="theme" value="yellow"> Yellow on black</label>
+      <label><input type="radio" name="theme" value="white"> White on black</label>
+      <label><input type="radio" name="theme" value="cream"> Black on cream</label>
+    </fieldset>
+    <fieldset>
+      <legend>Font</legend>
+      <label><input type="radio" name="font" value="standard"> Standard</label>
+      <label><input type="radio" name="font" value="lexend"> Lexend (made for easier reading)</label>
+    </fieldset>
+    <fieldset>
+      <legend>Line spacing</legend>
+      <label><input type="radio" name="spacing" value="normal"> Normal</label>
+      <label><input type="radio" name="spacing" value="roomy"> Roomy</label>
+      <label><input type="radio" name="spacing" value="extra"> Extra roomy</label>
+    </fieldset>
+    <fieldset>
+      <legend>Reading-aloud speed</legend>
+      <label><input type="radio" name="rate" value="0.85"> Slower</label>
+      <label><input type="radio" name="rate" value="1"> Normal</label>
+      <label><input type="radio" name="rate" value="1.15"> Faster</label>
+    </fieldset>
+    <label class="toggle"><input type="checkbox" id="wakeChk"> Keep my screen on while captions are live</label>
+    <button class="btn" id="displayDone">Done</button>
+  </div>
+  <div class="notice hidden" id="listenMsg" role="status" style="margin:8px 16px 0"></div>
+  <div class="sr-only" id="srLive" aria-live="polite" aria-atomic="false"></div>
+  <div class="captions" id="captions" aria-live="off">
     <div class="example-note" id="exampleNote">Example captions. When the service starts, the sermon will appear here as it is spoken.</div>
     <div class="cap-inner" id="capInner"></div>
     <p class="booth-link"><a href="booth.html">Sound booth sign-in</a></p>
@@ -48,6 +80,6 @@
   setTimeout(function () { show("Every Word is taking too long to start." + help); }, 10000);
 })();
 </script>
-<script type="module" src="reader.js?v=2026-11-10f"></script>
+<script type="module" src="reader.js?v=2026-11-12a"></script>
 </body>
 </html>
