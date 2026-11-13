@@ -1,5 +1,5 @@
 // Shared helpers for the reader and booth pages.
-export const VERSION = "2026-11-12a";
+export const VERSION = "2026-11-12b";
 
 // DeepL target languages offered in the booth.
 export const LANGS = {

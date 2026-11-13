@@ -151,3 +151,30 @@ body.focus .captions { display: flex; flex-direction: column; justify-content: c
 body.focus .cap-inner { font-size: calc(var(--cap-size) * 1.35); text-align: center; }
 body.focus .cap-inner .verse-card { text-align: start; }
 body.focus .booth-link, body.focus .example-note { display: none; }
+
+/* ---------- Slim top bar + menu panel ---------- */
+.vbar { flex-wrap: nowrap; padding: 8px 12px; }
+.vbar .brand { min-width: 0; flex-wrap: wrap; font-size: 17px; gap: 6px 8px; }
+.menu-btn { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.menu-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 20; }
+.menu-panel { position: fixed; z-index: 21; top: 8px; right: 8px; width: min(400px, calc(100vw - 16px)); max-height: calc(100% - 16px); overflow-y: auto;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.3);
+  padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.menu-head h2 { margin: 0; font-size: 19px; }
+.menu-section { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+.menu-section.menu-row, .menu-row { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px; }
+.menu-section.menu-row > .btn { flex: 1 1 140px; }
+.menu-label { font-weight: 700; font-size: 15px; }
+.size-val { min-width: 4ch; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+.menu-section select.btn { width: 100%; font-weight: 400; }
+.menu-panel details { border: 1px solid var(--line); border-radius: 12px; }
+.menu-panel summary { cursor: pointer; padding: 12px 14px; font-weight: 700; min-height: 44px; list-style-position: inside; }
+.menu-panel details[open] summary { border-bottom: 1px solid var(--line); }
+.menu-panel fieldset { border: 0; margin: 0; padding: 6px 14px 10px; display: flex; flex-direction: column; gap: 2px; }
+.menu-panel fieldset label { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 16px; }
+.menu-panel input[type=radio] { width: 20px; height: 20px; accent-color: var(--accent); }
+.menu-foot { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.menu-link { color: var(--muted); font-size: 15px; }
+@media (prefers-reduced-motion: no-preference) { .menu-panel:not(.hidden) { animation: menu-in .15s ease-out; } }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }

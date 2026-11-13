@@ -1,5 +1,5 @@
-import { CONFIG } from "./config.js?v=2026-11-12a";
-import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, roomPathForCode, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js?v=2026-11-12a";
+import { CONFIG } from "./config.js?v=2026-11-12b";
+import { VERSION, LANGS, RTL, esc, store, roomName, groupCodeParam, roomPathForCode, prettyCode, normCode, STALE_HOURS, markRefs, isConfigured } from "./common.js?v=2026-11-12b";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, query, limitToLast, onValue, onChildAdded, onChildChanged, onChildRemoved } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 window.__ewStarted = true;   // tells the page the code loaded (see the fallback message in the .html)
@@ -45,6 +45,8 @@ function applyPrefs() {
   $("focusBtn").setAttribute("aria-pressed", focus);
   $("listenBtn").setAttribute("aria-pressed", listening);
   $("listenBtn").textContent = listening ? "Stop listening" : "Listen";
+  $("listenChip").classList.toggle("hidden", !listening);
+  $("sizeVal").textContent = size + " px";
   $("origBtn").setAttribute("aria-pressed", showOrig);
   $("origBtn").classList.toggle("hidden", lang === "EN");
   const box = $("displayBox");
@@ -107,11 +109,21 @@ $("lang").onchange = e => {
 $("smaller").onclick = () => { size = Math.max(18, size - 4); store.set("size", size); applyPrefs(); render(); };
 $("bigger").onclick = () => { size = Math.min(64, size + 4); store.set("size", size); applyPrefs(); render(); };
 $("focusBtn").onclick = () => { focus = !focus; store.set("focus", focus); applyPrefs(); render(); };
-$("displayBtn").onclick = () => {
-  const open = $("displayBox").classList.toggle("hidden") === false;
-  $("displayBtn").setAttribute("aria-expanded", open);
-};
-$("displayDone").onclick = () => { $("displayBox").classList.add("hidden"); $("displayBtn").setAttribute("aria-expanded", false); $("displayBtn").focus(); };
+// ---------- menu ----------
+function openMenu() {
+  $("menuPanel").classList.remove("hidden"); $("menuBackdrop").classList.remove("hidden");
+  $("menuBtn").setAttribute("aria-expanded", "true");
+  $("menuClose").focus();
+}
+function closeMenu(returnFocus = true) {
+  $("menuPanel").classList.add("hidden"); $("menuBackdrop").classList.add("hidden");
+  $("menuBtn").setAttribute("aria-expanded", "false");
+  if (returnFocus) $("menuBtn").focus();
+}
+$("menuBtn").onclick = () => $("menuPanel").classList.contains("hidden") ? openMenu() : closeMenu();
+$("menuClose").onclick = () => closeMenu();
+$("menuBackdrop").onclick = () => closeMenu();
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("menuPanel").classList.contains("hidden")) closeMenu(); });
 $("displayBox").addEventListener("change", e => {
   const t = e.target;
   if (t.name === "theme") { theme = t.value; store.set("theme", theme); }
@@ -248,7 +260,8 @@ if ($("joinBtn") && $("joinBox") && $("joinIn") && $("joinGo")) {
 $("joinBtn").textContent = isGroup ? "Leave group" : "Join a group";
 if (isGroup) $("church").textContent = "Private group";
 $("joinBtn").onclick = () => {
-  if (isGroup) { location.assign(new URL("index.html", location.href).href); return; }
+  if (isGroup) { closeMenu(false); location.assign(new URL("index.html", location.href).href); return; }
+  closeMenu(false);
   $("joinBox").classList.toggle("hidden"); $("joinIn").focus();
 };
 const join = () => {

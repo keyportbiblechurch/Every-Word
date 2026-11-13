@@ -7,21 +7,79 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Lexend:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-11-12a">
+<link rel="stylesheet" href="styles.css?v=2026-11-12b">
 </head>
 <body>
 <div class="viewer">
   <div class="vbar">
-    <div class="brand"><span id="church">Every Word</span> <span class="chip" id="status">Connecting…</span></div>
-    <div class="ctrl">
-      <select id="lang" class="btn" aria-label="Caption language"><option value="EN">English</option></select>
-      <button class="btn" id="smaller" aria-label="Smaller text">A−</button>
-      <button class="btn" id="bigger" aria-label="Larger text">A+</button>
+    <div class="brand"><span id="church">Every Word</span> <span class="chip" id="status">Connecting…</span> <span class="chip hidden" id="listenChip">Listening</span></div>
+    <button class="btn menu-btn" id="menuBtn" aria-expanded="false" aria-controls="menuPanel">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      Menu
+    </button>
+  </div>
+  <div class="menu-backdrop hidden" id="menuBackdrop"></div>
+  <div class="menu-panel hidden" id="menuPanel" role="dialog" aria-modal="false" aria-labelledby="menuTitle">
+    <div class="menu-head">
+      <h2 id="menuTitle">Reading options</h2>
+      <button class="btn" id="menuClose" aria-label="Close menu">✕</button>
+    </div>
+    <div class="menu-section">
+      <label class="field" for="lang">Language
+        <select id="lang" class="btn"><option value="EN">English</option></select>
+      </label>
+      <button class="btn hidden" id="origBtn" aria-pressed="true">Show English too</button>
+    </div>
+    <div class="menu-section">
+      <span class="menu-label" id="sizeLabel">Text size</span>
+      <div class="menu-row" role="group" aria-labelledby="sizeLabel">
+        <button class="btn" id="smaller" aria-label="Smaller text">A−</button>
+        <span class="size-val" id="sizeVal" aria-live="polite"></span>
+        <button class="btn" id="bigger" aria-label="Larger text">A+</button>
+      </div>
+    </div>
+    <div class="menu-section menu-row">
       <button class="btn" id="listenBtn" aria-pressed="false">Listen</button>
       <button class="btn" id="focusBtn" aria-pressed="false">Focus</button>
-      <button class="btn" id="displayBtn" aria-expanded="false" aria-controls="displayBox">Display</button>
-      <button class="btn hidden" id="origBtn" aria-pressed="true">Show English too</button>
+    </div>
+    <div class="menu-section" id="displayBox">
+      <details>
+        <summary>Colors</summary>
+        <fieldset><legend class="sr-only">Colors</legend>
+          <label><input type="radio" name="theme" value="auto"> Match my phone</label>
+          <label><input type="radio" name="theme" value="yellow"> Yellow on black</label>
+          <label><input type="radio" name="theme" value="white"> White on black</label>
+          <label><input type="radio" name="theme" value="cream"> Black on cream</label>
+        </fieldset>
+      </details>
+      <details>
+        <summary>Font</summary>
+        <fieldset><legend class="sr-only">Font</legend>
+          <label><input type="radio" name="font" value="standard"> Standard</label>
+          <label><input type="radio" name="font" value="lexend"> Lexend (made for easier reading)</label>
+        </fieldset>
+      </details>
+      <details>
+        <summary>Line spacing</summary>
+        <fieldset><legend class="sr-only">Line spacing</legend>
+          <label><input type="radio" name="spacing" value="normal"> Normal</label>
+          <label><input type="radio" name="spacing" value="roomy"> Roomy</label>
+          <label><input type="radio" name="spacing" value="extra"> Extra roomy</label>
+        </fieldset>
+      </details>
+      <details>
+        <summary>Reading-aloud speed</summary>
+        <fieldset><legend class="sr-only">Reading-aloud speed</legend>
+          <label><input type="radio" name="rate" value="0.85"> Slower</label>
+          <label><input type="radio" name="rate" value="1"> Normal</label>
+          <label><input type="radio" name="rate" value="1.15"> Faster</label>
+        </fieldset>
+      </details>
+      <label class="toggle"><input type="checkbox" id="wakeChk"> Keep my screen on while captions are live</label>
+    </div>
+    <div class="menu-section menu-foot">
       <button class="btn" id="joinBtn">Join a group</button>
+      <a href="booth.html" class="menu-link">Sound booth sign-in</a>
     </div>
   </div>
   <div class="join-box hidden" id="joinBox">
@@ -31,40 +89,11 @@
     <button class="btn primary" id="joinGo">Join</button>
     <span class="hint" id="joinMsg">Your group leader can give you the code.</span>
   </div>
-  <div class="display-box hidden" id="displayBox" role="region" aria-label="Display options">
-    <fieldset>
-      <legend>Colors</legend>
-      <label><input type="radio" name="theme" value="auto"> Match my phone</label>
-      <label><input type="radio" name="theme" value="yellow"> Yellow on black</label>
-      <label><input type="radio" name="theme" value="white"> White on black</label>
-      <label><input type="radio" name="theme" value="cream"> Black on cream</label>
-    </fieldset>
-    <fieldset>
-      <legend>Font</legend>
-      <label><input type="radio" name="font" value="standard"> Standard</label>
-      <label><input type="radio" name="font" value="lexend"> Lexend (made for easier reading)</label>
-    </fieldset>
-    <fieldset>
-      <legend>Line spacing</legend>
-      <label><input type="radio" name="spacing" value="normal"> Normal</label>
-      <label><input type="radio" name="spacing" value="roomy"> Roomy</label>
-      <label><input type="radio" name="spacing" value="extra"> Extra roomy</label>
-    </fieldset>
-    <fieldset>
-      <legend>Reading-aloud speed</legend>
-      <label><input type="radio" name="rate" value="0.85"> Slower</label>
-      <label><input type="radio" name="rate" value="1"> Normal</label>
-      <label><input type="radio" name="rate" value="1.15"> Faster</label>
-    </fieldset>
-    <label class="toggle"><input type="checkbox" id="wakeChk"> Keep my screen on while captions are live</label>
-    <button class="btn" id="displayDone">Done</button>
-  </div>
   <div class="notice hidden" id="listenMsg" role="status" style="margin:8px 16px 0"></div>
   <div class="sr-only" id="srLive" aria-live="polite" aria-atomic="false"></div>
   <div class="captions" id="captions" aria-live="off">
     <div class="example-note" id="exampleNote">Example captions. When the service starts, the sermon will appear here as it is spoken.</div>
     <div class="cap-inner" id="capInner"></div>
-    <p class="booth-link"><a href="booth.html">Sound booth sign-in</a></p>
   </div>
   <button class="btn primary jump hidden" id="jump">Jump to live ↓</button>
 </div>
@@ -80,6 +109,6 @@
   setTimeout(function () { show("Every Word is taking too long to start." + help); }, 10000);
 })();
 </script>
-<script type="module" src="reader.js?v=2026-11-12a"></script>
+<script type="module" src="reader.js?v=2026-11-12b"></script>
 </body>
 </html>
